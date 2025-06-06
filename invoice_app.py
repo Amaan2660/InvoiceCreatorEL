@@ -126,8 +126,11 @@ with tab2:
         vat = st.text_input("VAT / Reg No.")
         submit = st.form_submit_button("Add Customer")
         if submit:
-            add_customer(name, address, email, vat)
-            st.success("Customer added.")
+            if not name.strip():
+                st.error("Customer name is required.")
+            else:
+                add_customer(name, address, email, vat)
+                st.success("Customer added.")
 
     st.subheader("Customer List")
     st.dataframe(pd.DataFrame([{"Name": c.name, "Email": c.email, "VAT": c.vat} for c in get_customers()]))
@@ -142,5 +145,17 @@ with tab1:
     trips = st.number_input("Trip Count", min_value=1)
 
     if st.button("Generate PDF"):
-        pdf = create_invoice_pdf(customer, invoice_number, invoice_date, amount, trips)
-        st.download_button("📥 Download Invoice", data=pdf, file_name=f"Invoice_{invoice_number}.pdf", mime="application/pdf")
+        errors = []
+        if not customer:
+            errors.append("Customer must be selected.")
+        if not invoice_number.strip():
+            errors.append("Invoice number is required.")
+        if amount <= 0:
+            errors.append("Total amount must be greater than zero.")
+
+        if errors:
+            for err in errors:
+                st.error(err)
+        else:
+            pdf = create_invoice_pdf(customer, invoice_number, invoice_date, amount, trips)
+            st.download_button("📥 Download Invoice", data=pdf, file_name=f"Invoice_{invoice_number}.pdf", mime="application/pdf")
