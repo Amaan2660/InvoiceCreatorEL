@@ -77,12 +77,11 @@ Email: limoexpresscph@gmail.com
     pdf.cell(80, 6, "To:")
     pdf.set_font("Arial", size=10)
     pdf.set_xy(120, 36)
-    pdf.multi_cell(80, 6, f"""
-{customer.name}
+    recipient_text = f"""{customer.name}
 {customer.address or ''}
 {customer.vat or ''}
-{customer.email or ''}
-    ", align="L")
+{customer.email or ''}"""
+    pdf.multi_cell(80, 6, recipient_text, align="L")
 
     # Invoice meta
     pdf.set_xy(10, 100)
@@ -113,8 +112,8 @@ Email: limoexpresscph@gmail.com
 # ------------------------------
 # STREAMLIT APP
 # ------------------------------
-st.set_page_config(page_title="Invoice Generator", layout="centered")
-st.title("🧾 Invoice Generator")
+st.set_page_config(page_title="InvoiceCreatorEL", layout="centered")
+st.title("🚐 InvoiceCreatorEL")
 
 tab1, tab2 = st.tabs(["Create Invoice", "Customers"])
 
