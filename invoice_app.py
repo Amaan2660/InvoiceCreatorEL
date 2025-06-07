@@ -1,18 +1,20 @@
+# Full updated Streamlit app code for InvoiceCreatorEL
+
 import datetime
 import pandas as pd
 import streamlit as st
 from fpdf import FPDF
 from sqlalchemy import Column, String, Integer, Boolean, create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
+from io import BytesIO
 
-# Database setup
-import os
+# DATABASE SETUP
 DB_URL = st.secrets["SUPABASE_DB_URL"]
 engine = create_engine(DB_URL)
 Base = declarative_base()
 SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
 
-# Database model
+# MODELS
 class Customer(Base):
     __tablename__ = "customers"
     id = Column(Integer, primary_key=True, index=True)
@@ -25,7 +27,7 @@ class Customer(Base):
 
 Base.metadata.create_all(bind=engine)
 
-# Helper functions
+# DB FUNCTIONS
 def add_customer(**kwargs):
     with SessionLocal() as session:
         customer = Customer(**kwargs)
@@ -48,21 +50,24 @@ def delete_customer(id):
         session.query(Customer).filter(Customer.id == id).delete()
         session.commit()
 
-# Invoice PDF generator
-def generate_invoice(receiver, invoice_number, items, currency="DKK"):
+# PDF GENERATION
+
+def generate_invoice(receiver, invoice_number, items, currency, purpose):
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Helvetica", "B", 16)
-    pdf.cell(0, 10, f"INVOICE", ln=True)
+    pdf.cell(0, 10, "INVOICE", ln=True)
 
-    # Meta
-    pdf.set_font("Helvetica", "", 12)
     today = datetime.date.today().strftime("%Y-%m-%d")
+    pdf.set_font("Helvetica", "", 12)
     pdf.cell(0, 8, f"Invoice #: {invoice_number}", ln=True)
     pdf.cell(0, 8, f"Date: {today}", ln=True)
+    pdf.ln(4)
 
-    # Receiver
-    pdf.ln(5)
+    if purpose:
+        pdf.multi_cell(0, 6, f"{purpose}")
+        pdf.ln(4)
+
     pdf.set_font("Helvetica", "B", 12)
     pdf.cell(0, 8, "Bill To:", ln=True)
     pdf.set_font("Helvetica", "", 12)
@@ -72,9 +77,8 @@ def generate_invoice(receiver, invoice_number, items, currency="DKK"):
     if receiver.vat and receiver.is_company:
         pdf.cell(0, 6, f"VAT No: {receiver.vat}", ln=True)
     pdf.cell(0, 6, f"Email: {receiver.email}", ln=True)
+    pdf.ln(6)
 
-    # Items
-    pdf.ln(8)
     total = 0
     pdf.set_font("Helvetica", "B", 12)
     pdf.cell(100, 8, "Description", border=1)
@@ -84,39 +88,36 @@ def generate_invoice(receiver, invoice_number, items, currency="DKK"):
         desc = row.get("Description", "")
         amt = float(row.get("Amount", 0))
         total += amt
-        pdf.cell(100, 8, desc, border=1)
+        pdf.cell(100, 8, str(desc), border=1)
         pdf.cell(40, 8, f"{currency} {amt:.2f}", border=1, ln=True)
 
     pdf.set_font("Helvetica", "B", 12)
     pdf.cell(100, 8, "Total", border=1)
     pdf.cell(40, 8, f"{currency} {total:.2f}", border=1, ln=True)
-
     return pdf.output(dest="S").encode("latin-1")
 
-# Streamlit UI
+# STREAMLIT UI
 st.set_page_config("InvoiceCreatorEL", layout="centered")
 st.title("📄 Invoice Creator EL")
-
 tab1, tab2 = st.tabs(["🧾 Create Invoice", "👥 Manage Customers"])
 
-# --- Manage Customers ---
+# --- CUSTOMER MANAGEMENT ---
 with tab2:
     st.subheader("Create New Customer")
     with st.form("add_customer"):
-        name = st.text_input("Name", max_chars=100)
+        name = st.text_input("Name")
         is_company = st.radio("Type", ["Company", "Individual"]) == "Company"
         address = st.text_area("Address")
         email = st.text_input("Email")
         contact = st.text_input("Contact Person (optional)")
-        vat = st.text_input("VAT No." if is_company else "Not required", disabled=not is_company)
+        vat = st.text_input("VAT No.", disabled=not is_company)
         submitted = st.form_submit_button("Add Customer")
         if submitted and name and email:
             add_customer(name=name, address=address, email=email, contact=contact, vat=vat, is_company=is_company)
             st.success("Customer added.")
 
-    st.subheader("Edit or Delete Customers")
-    customers = get_customers()
-    for cust in customers:
+    st.subheader("Edit/Delete Customers")
+    for cust in get_customers():
         with st.expander(cust.name):
             with st.form(f"edit_{cust.id}"):
                 cname = st.text_input("Name", value=cust.name)
@@ -138,13 +139,16 @@ with tab2:
                     delete_customer(cust.id)
                     st.success("Deleted.")
 
-# --- Create Invoice ---
+# --- CREATE INVOICE ---
 with tab1:
     st.subheader("Create Invoice")
     customers = get_customers()
-    selected = st.selectbox("Select Customer", customers, format_func=lambda x: x.name if x else "")
+    receiver = st.selectbox("Select Customer", customers, format_func=lambda x: x.name if x else "")
     invoice_number = st.text_input("Invoice Number")
     currency = st.selectbox("Currency", ["DKK", "EUR", "USD", "GBP"])
+    invoice_purpose = st.text_input("Invoice Description (e.g. For services in June)")
+    manual_total = st.number_input("Manual Total Amount (optional)", min_value=0.0, step=100.0)
+    manual_bookings = st.number_input("Manual Number of Bookings (optional)", min_value=0)
     uploaded = st.file_uploader("Upload CSV with Description + Amount columns", type=["csv"])
     if uploaded:
         df = pd.read_csv(uploaded)
@@ -152,8 +156,33 @@ with tab1:
         df = st.data_editor(df, num_rows="dynamic", use_container_width=True)
 
     if st.button("Generate Invoice"):
-        if not selected or not invoice_number or uploaded is None:
+        if not receiver or not invoice_number or uploaded is None:
             st.error("Missing required information.")
         else:
-            pdf_bytes = generate_invoice(selected, invoice_number, df, currency)
-            st.download_button("⬇️ Download PDF Invoice", pdf_bytes, file_name=f"Invoice_{invoice_number}.pdf")
+            total_amount = manual_total if manual_total > 0 else df["Amount"].sum()
+            if manual_total > 0:
+                df.loc[len(df)] = ["Manual entry", manual_total]
+
+            pdf_bytes = generate_invoice(receiver, invoice_number, df, currency, invoice_purpose)
+            # Specification Excel
+            export_df = df.copy()
+            export_df = export_df.rename(columns={
+                "Date": "Date", "From": "From", "To": "To",
+                "Customer Reference": "Customer Reference", "Amount": "Price"
+            })
+            cleaned = export_df[["Date", "From", "To", "Customer Reference", "Price"]].copy()
+            buffer = BytesIO()
+            cleaned.to_excel(buffer, index=False)
+
+            st.download_button(
+                label="⬇️ Download PDF Invoice",
+                data=pdf_bytes,
+                file_name=f"Invoice {invoice_number} for {receiver.name}.pdf",
+                mime="application/pdf"
+            )
+            st.download_button(
+                label="⬇️ Download Specification XLSX",
+                data=buffer.getvalue(),
+                file_name=f"SERVICE SPECIFICATION FOR INVOICE {invoice_number}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
