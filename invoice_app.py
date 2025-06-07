@@ -199,3 +199,7 @@ with tab1:
 
             st.download_button(
                 label="⬇️ Download PDF Invoice",
+                data=pdf_bytes,
+                file_name=f"Invoice {invoice_number} for {receiver.name}.pdf",
+                mime="application/pdf"
+            )
