@@ -112,9 +112,12 @@ with tab2:
         contact = st.text_input("Contact Person (optional)")
         vat = st.text_input("VAT No.", disabled=not is_company)
         submitted = st.form_submit_button("Add Customer")
-        if submitted and name and email:
-            add_customer(name=name, address=address, email=email, contact=contact, vat=vat, is_company=is_company)
-            st.success("Customer added.")
+        if submitted:
+            if not name or not email:
+                st.error("Name and Email are required.")
+            else:
+                add_customer(name=name, address=address, email=email, contact=contact, vat=vat, is_company=is_company)
+                st.success("Customer added.")
 
     st.subheader("Edit/Delete Customers")
     for cust in get_customers():
@@ -149,40 +152,40 @@ with tab1:
     invoice_purpose = st.text_input("Invoice Description (e.g. For services in June)")
     manual_total = st.number_input("Manual Total Amount (optional)", min_value=0.0, step=100.0)
     manual_bookings = st.number_input("Manual Number of Bookings (optional)", min_value=0)
-    uploaded = st.file_uploader("Upload CSV with Description + Amount columns", type=["csv"])
+    uploaded = st.file_uploader("Upload CSV with Description + Amount columns (optional)", type=["csv"])
+    df = pd.DataFrame(columns=["Description", "Amount"])
     if uploaded:
         df = pd.read_csv(uploaded)
         st.write("Edit invoice rows below if needed:")
         df = st.data_editor(df, num_rows="dynamic", use_container_width=True)
 
     if st.button("Generate Invoice"):
-        if not receiver or not invoice_number or uploaded is None:
-            st.error("Missing required information.")
+        if not receiver or not invoice_number:
+            st.error("Customer and Invoice Number are required.")
         else:
-            total_amount = manual_total if manual_total > 0 else df["Amount"].sum()
             if manual_total > 0:
-                df.loc[len(df)] = ["Manual entry", manual_total]
+                df = pd.DataFrame([{"Description": f"Manual entry for {manual_bookings} bookings", "Amount": manual_total}])
 
             pdf_bytes = generate_invoice(receiver, invoice_number, df, currency, invoice_purpose)
-            # Specification Excel
-            export_df = df.copy()
-            export_df = export_df.rename(columns={
-                "Date": "Date", "From": "From", "To": "To",
-                "Customer Reference": "Customer Reference", "Amount": "Price"
-            })
-            cleaned = export_df[["Date", "From", "To", "Customer Reference", "Price"]].copy()
-            buffer = BytesIO()
-            cleaned.to_excel(buffer, index=False)
+            # Cleaned Specification Excel
+            if not df.empty:
+                export_df = df.copy()
+                keep_cols = [col for col in ["Date", "From", "To", "Customer Reference", "Amount"] if col in export_df.columns]
+                cleaned = export_df[keep_cols].copy()
+                buffer = BytesIO()
+                cleaned.rename(columns={"Amount": "Price"}, inplace=True)
+                cleaned.to_excel(buffer, index=False)
+
+                st.download_button(
+                    label="⬇️ Download Specification XLSX",
+                    data=buffer.getvalue(),
+                    file_name=f"SERVICE SPECIFICATION FOR INVOICE {invoice_number}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
 
             st.download_button(
                 label="⬇️ Download PDF Invoice",
                 data=pdf_bytes,
                 file_name=f"Invoice {invoice_number} for {receiver.name}.pdf",
                 mime="application/pdf"
-            )
-            st.download_button(
-                label="⬇️ Download Specification XLSX",
-                data=buffer.getvalue(),
-                file_name=f"SERVICE SPECIFICATION FOR INVOICE {invoice_number}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
