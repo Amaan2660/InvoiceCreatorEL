@@ -1,4 +1,4 @@
-# Full updated Streamlit app code for InvoiceCreatorEL
+# Full updated Streamlit app code for InvoiceCreatorEL with Invoice 51 layout
 
 import datetime
 import pandas as pd
@@ -55,22 +55,36 @@ def delete_customer(id):
 def generate_invoice(receiver, invoice_number, items, currency, purpose):
     pdf = FPDF()
     pdf.add_page()
+
+    # Header with logo and sender info (Invoice 51 style)
+    pdf.image("logo.png", x=10, y=8, w=50)
+    pdf.set_xy(120, 8)
+    pdf.set_font("Helvetica", size=10)
+    pdf.multi_cell(80, 5, """
+Limousine Service Xpress ApS
+Industriholmen 82
+2650 Hvidovre
+CVR: 45247961
+IBAN: LT87 3250 0345 4552 5735
+SWIFT: REVOLT21
+Email: limoexpresscph@gmail.com
+    """)
+
+    pdf.ln(30)
     pdf.set_font("Helvetica", "B", 16)
     pdf.cell(0, 10, "INVOICE", ln=True)
 
     today = datetime.date.today().strftime("%Y-%m-%d")
-    pdf.set_font("Helvetica", "", 12)
-    pdf.cell(0, 8, f"Invoice #: {invoice_number}", ln=True)
-    pdf.cell(0, 8, f"Date: {today}", ln=True)
-    pdf.ln(4)
-
+    pdf.set_font("Helvetica", size=11)
+    pdf.cell(0, 6, f"Invoice #: {invoice_number}", ln=True)
+    pdf.cell(0, 6, f"Date: {today}", ln=True)
     if purpose:
-        pdf.multi_cell(0, 6, f"{purpose}")
-        pdf.ln(4)
+        pdf.multi_cell(0, 6, f"Description: {purpose}")
+    pdf.ln(3)
 
     pdf.set_font("Helvetica", "B", 12)
-    pdf.cell(0, 8, "Bill To:", ln=True)
-    pdf.set_font("Helvetica", "", 12)
+    pdf.cell(0, 6, "Bill To:", ln=True)
+    pdf.set_font("Helvetica", size=11)
     pdf.multi_cell(0, 6, f"{receiver.name}\n{receiver.address}")
     if receiver.contact:
         pdf.cell(0, 6, f"Contact: {receiver.contact}", ln=True)
@@ -81,7 +95,7 @@ def generate_invoice(receiver, invoice_number, items, currency, purpose):
 
     total = 0
     pdf.set_font("Helvetica", "B", 12)
-    pdf.cell(100, 8, "Description", border=1)
+    pdf.cell(100, 8, "Service", border=1)
     pdf.cell(40, 8, "Amount", border=1, ln=True)
     pdf.set_font("Helvetica", "", 12)
     for _, row in items.iterrows():
@@ -149,7 +163,7 @@ with tab1:
     receiver = st.selectbox("Select Customer", customers, format_func=lambda x: x.name if x else "")
     invoice_number = st.text_input("Invoice Number")
     currency = st.selectbox("Currency", ["DKK", "EUR", "USD", "GBP"])
-    invoice_purpose = st.text_input("Invoice Description (e.g. For services in June)")
+    invoice_purpose = st.text_input("Invoice Description (e.g. Transfers in May 2025)")
     manual_total = st.number_input("Manual Total Amount (optional)", min_value=0.0, step=100.0)
     manual_bookings = st.number_input("Manual Number of Bookings (optional)", min_value=0)
     uploaded = st.file_uploader("Upload CSV with Description + Amount columns (optional)", type=["csv"])
@@ -164,7 +178,7 @@ with tab1:
             st.error("Customer and Invoice Number are required.")
         else:
             if manual_total > 0:
-                df = pd.DataFrame([{"Description": f"Manual entry for {manual_bookings} bookings", "Amount": manual_total}])
+                df = pd.DataFrame([{"Description": invoice_purpose, "Amount": manual_total}])
 
             pdf_bytes = generate_invoice(receiver, invoice_number, df, currency, invoice_purpose)
             # Cleaned Specification Excel
@@ -174,7 +188,7 @@ with tab1:
                 cleaned = export_df[keep_cols].copy()
                 buffer = BytesIO()
                 cleaned.rename(columns={"Amount": "Price"}, inplace=True)
-                cleaned.to_excel(buffer, index=False)
+                cleaned.to_excel(buffer, index=False, engine="openpyxl")
 
                 st.download_button(
                     label="⬇️ Download Specification XLSX",
@@ -185,7 +199,3 @@ with tab1:
 
             st.download_button(
                 label="⬇️ Download PDF Invoice",
-                data=pdf_bytes,
-                file_name=f"Invoice {invoice_number} for {receiver.name}.pdf",
-                mime="application/pdf"
-            )
