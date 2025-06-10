@@ -92,18 +92,19 @@ Email: limoexpresscph@gmail.com
     pdf.cell(100, 8, "Service", border=1)
     pdf.cell(40, 8, "Amount", border=1, ln=True)
     pdf.set_font("Helvetica", "", 12)
+   
     for _, row in items.iterrows():
-    desc = row.get("Description", "")
-    amt = float(row.get("Amount", 0))
+        desc = row.get("Description", "")
+        amt = float(row.get("Amount", 0))
 
-    if desc != "Number of bookings":
-        total += amt
-        amount_str = f"{currency} {amt:.2f}"
-    else:
-        amount_str = f"{int(amt)}"  # show as plain number, no currency
+        if desc != "Number of bookings":
+            total += amt
+            amount_str = f"{currency} {amt:.2f}"
+        else:
+            amount_str = f"{int(amt)}"  # show as plain number, no currency
 
-    pdf.cell(100, 8, str(desc), border=1)
-    pdf.cell(40, 8, amount_str, border=1, ln=True)
+        pdf.cell(100, 8, str(desc), border=1)
+        pdf.cell(40, 8, amount_str, border=1, ln=True)
 
 
 
