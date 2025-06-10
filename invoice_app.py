@@ -174,6 +174,8 @@ with tab1:
     if uploaded:
         if uploaded.name.endswith("csv"):
             raw = pd.read_csv(uploaded, encoding="utf-8-sig")
+        elif uploaded.name.endswith("xls"):
+            raw = pd.read_excel(uploaded, header=0, engine="xlrd")
         else:
             raw = pd.read_excel(uploaded, header=0)
 
