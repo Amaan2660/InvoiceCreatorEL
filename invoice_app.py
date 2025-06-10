@@ -156,7 +156,7 @@ with tab1:
     invoice_purpose = st.text_input("Invoice Description (e.g. Transfers in May 2025)")
     manual_total = st.number_input("Manual Total Amount", min_value=0.0, step=100.0)
     manual_bookings = st.number_input("Manual Number of Bookings", min_value=0)
-    uploaded = st.file_uploader("Upload trip data (Excel)", type="xlsx")
+    uploaded = st.file_uploader("Upload trip data (Excel)", type=["xlsx"])
 
     if st.button("Generate Invoice"):
         if not receiver or not invoice_number:
@@ -165,9 +165,11 @@ with tab1:
             pdf_bytes = generate_invoice_pdf(receiver, invoice_number, currency, invoice_purpose, manual_total, manual_bookings)
 
             if uploaded:
-                full_df = pd.read_excel(uploaded, header=0)
-                columns_to_keep = ["Trip Date", "Passenger", "From", "To", "Cust. Ref."]
-                cleaned = full_df[[col for col in columns_to_keep if col in full_df.columns]].copy()
+                df_uploaded = pd.read_excel(uploaded, header=0)
+                if "Unnamed: 0" in df_uploaded.columns:
+                    df_uploaded.drop(columns=["Unnamed: 0"], inplace=True)
+                keep_cols = ["Trip Date", "Passenger", "From", "To", "Cust. Ref."]
+                cleaned = df_uploaded[[c for c in keep_cols if c in df_uploaded.columns]].copy()
                 cleaned.rename(columns={"Cust. Ref.": "Customer Reference"}, inplace=True)
                 buffer = BytesIO()
                 cleaned.to_excel(buffer, index=False, engine="openpyxl")
