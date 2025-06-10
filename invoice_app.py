@@ -183,7 +183,12 @@ with tab1:
             st.error("Customer and Invoice Number are required.")
         else:
             if manual_total > 0:
-                df = pd.DataFrame([{"Description": invoice_purpose, "Amount": manual_total}])
+                rows = []
+                if manual_bookings > 0:
+                    rows.append({"Description": "Number of bookings", "Amount": manual_bookings})
+                rows.append({"Description": invoice_purpose, "Amount": manual_total})
+                df = pd.DataFrame(rows)
+
             pdf_bytes = generate_invoice(receiver, invoice_number, df, currency, invoice_purpose)
             st.download_button(
                 label="⬇️ Download PDF Invoice",
