@@ -97,7 +97,9 @@ Email: limoexpresscph@gmail.com
         amt = float(row.get("Amount", 0))
         total += amt
         pdf.cell(100, 8, str(desc), border=1)
-        pdf.cell(40, 8, f"{currency} {amt:.2f}", border=1, ln=True)
+        label = f"{amt:.0f}" if desc == "Number of bookings" else f"{currency} {amt:.2f}"
+        pdf.cell(40, 8, label, border=1, ln=True)
+
 
     pdf.set_font("Helvetica", "B", 12)
     pdf.cell(100, 8, "Total", border=1)
