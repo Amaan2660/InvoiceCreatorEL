@@ -172,20 +172,30 @@ with tab1:
     df = pd.DataFrame(columns=["Description", "Amount"])
 
     if uploaded:
-        raw = pd.read_excel(uploaded, header=0)
-        expected_cols = ["Trip Date", "Passenger", "From", "To", "Cust. Ref."]
-        filtered = raw[[col for col in expected_cols if col in raw.columns]]
-        st.write("Preview of cleaned data:")
-        st.dataframe(filtered)
+        if uploaded.name.endswith("csv"):
+            raw = pd.read_csv(uploaded, encoding="utf-8-sig")
+        else:
+            raw = pd.read_excel(uploaded, header=0)
 
-        buffer = BytesIO()
-        filtered.to_excel(buffer, index=False, engine="openpyxl")
-        st.download_button(
-            label="⬇️ Download Cleaned Specification XLSX",
-            data=buffer.getvalue(),
-            file_name=f"SERVICE SPECIFICATION FOR INVOICE {invoice_number}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        expected_cols = ["Trip Date", "Passenger", "From", "To", "Cust. Ref."]
+        found_cols = [col for col in expected_cols if col in raw.columns]
+
+        if len(found_cols) < len(expected_cols):
+            st.warning("Missing required columns: " + ", ".join(set(expected_cols) - set(found_cols)))
+        else:
+            filtered = raw[found_cols]
+            st.write("Preview of cleaned data:")
+            st.dataframe(filtered)
+
+            buffer = BytesIO()
+            filtered.to_excel(buffer, index=False, engine="openpyxl")
+            st.download_button(
+                label="⬇️ Download Cleaned Specification XLSX",
+                data=buffer.getvalue(),
+                file_name=f"SERVICE SPECIFICATION FOR INVOICE {invoice_number}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
+
 
     if st.button("Generate Invoice"):
         if not receiver or not invoice_number:
