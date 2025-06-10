@@ -104,8 +104,8 @@ Email: limoexpresscph@gmail.com
 
 # ------------------- STREAMLIT UI -------------------
 st.set_page_config("InvoiceCreatorEL", layout="centered")
-st.title("📄 Invoice Creator EL")
-tab1, tab2 = st.tabs(["🧾 Create Invoice", "👥 Manage Customers"])
+st.title("\U0001F4C4 Invoice Creator EL")
+tab1, tab2 = st.tabs(["\U0001F9FE Create Invoice", "\U0001F465 Manage Customers"])
 
 with tab2:
     st.subheader("Create New Customer")
@@ -156,7 +156,7 @@ with tab1:
     invoice_purpose = st.text_input("Invoice Description (e.g. Transfers in May 2025)")
     manual_total = st.number_input("Manual Total Amount", min_value=0.0, step=100.0)
     manual_bookings = st.number_input("Manual Number of Bookings", min_value=0)
-    uploaded = st.file_uploader("Upload trip data (CSV)", type="csv")
+    uploaded = st.file_uploader("Upload trip data (Excel)", type="xlsx")
 
     if st.button("Generate Invoice"):
         if not receiver or not invoice_number:
@@ -165,9 +165,9 @@ with tab1:
             pdf_bytes = generate_invoice_pdf(receiver, invoice_number, currency, invoice_purpose, manual_total, manual_bookings)
 
             if uploaded:
-                trips_df = pd.read_csv(uploaded, header=0)
-                keep_cols = ["Trip Date", "Passenger", "From", "To", "Cust. Ref."]
-                cleaned = trips_df[[c for c in keep_cols if c in trips_df.columns]].copy()
+                full_df = pd.read_excel(uploaded, header=0)
+                columns_to_keep = ["Trip Date", "Passenger", "From", "To", "Cust. Ref."]
+                cleaned = full_df[[col for col in columns_to_keep if col in full_df.columns]].copy()
                 cleaned.rename(columns={"Cust. Ref.": "Customer Reference"}, inplace=True)
                 buffer = BytesIO()
                 cleaned.to_excel(buffer, index=False, engine="openpyxl")
