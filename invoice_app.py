@@ -191,7 +191,7 @@ if uploaded and mode == "Auto from Excel":
 
     
     if st.button("Generate Invoice"):
-    if not receiver or not invoice_number:
+        if not receiver or not invoice_number:
         st.error("Customer and Invoice Number are required.")
     else:
         if uploaded and mode == "Auto from Excel":
