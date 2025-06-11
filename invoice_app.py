@@ -84,8 +84,8 @@ def generate_invoice_pdf(receiver, invoice_number, currency, description, total_
     pdf.set_font("Helvetica", size=11)
     pdf.set_xy(10, 30)
     pdf.set_font("Helvetica", style="B", size=11)
-    pdf.multi_cell(90, 6, "From:")
-    pdf.set_font("Helvetica", style="", size=11)
+    pdf.cell(90, 6, "From:", ln=True)
+    pdf.set_font("Helvetica", size=11)
     pdf.multi_cell(90, 6, """Limousine Service Xpress ApS
 Industriholmen 82
 2650 Hvidovre
@@ -98,7 +98,7 @@ Email: limoexpresscph@gmail.com""")
     pdf.set_xy(120, 30)
     pdf.set_font("Helvetica", style="B", size=11)
     pdf.cell(0, 6, "To:", ln=True)
-    pdf.set_font("Helvetica", style="", size=11)
+    pdf.set_font("Helvetica", size=11)
     to_lines = [receiver.name]
     if receiver.contact:
         to_lines.append(f"Att: {receiver.contact}")
@@ -107,6 +107,7 @@ Email: limoexpresscph@gmail.com""")
     if receiver.vat and receiver.is_company:
         to_lines.append(f"VAT No: {receiver.vat}")
     to_lines.append(f"Email: {receiver.email}")
+    pdf.set_x(120)
     pdf.multi_cell(0, 6, "\n".join(to_lines))
 
     pdf.set_xy(10, 100)
@@ -142,86 +143,4 @@ Email: limoexpresscph@gmail.com""")
     pdf.cell(0, 6, f"Please add invoice number {invoice_number} as reference when making payment.", ln=True)
 
     return pdf.output(dest="S").encode("latin-1")
-
-# ------------------- STREAMLIT UI -------------------
-st.set_page_config("InvoiceCreatorEL", layout="centered")
-st.title("\U0001F4C4 Invoice Creator EL")
-tab1, tab2 = st.tabs(["\U0001F9FE Create Invoice", "\U0001F465 Manage Customers"])
-
-with tab1:
-    st.subheader("Create Invoice")
-    customers = get_customers()
-    receiver = st.selectbox("Select Customer", customers, format_func=lambda x: x.name if x else "")
-    invoice_number = st.text_input("Invoice Number")
-    currency = st.selectbox("Currency", ["DKK", "EUR", "USD", "GBP"])
-    invoice_purpose = st.text_input("Invoice Description (e.g. Transfers in May 2025)")
-    due_date = st.date_input("Due Date")
-    mode = st.radio("Select Amount Mode", ["Manual", "Auto from Excel"])
-
-    uploaded = st.file_uploader("Upload Excel File", type=["xlsx"])
-    total_amount_dkk = 0.0
-    booking_count = 0
-    cleaned_df = pd.DataFrame()
-
-    if uploaded:
-        df = pd.read_excel(uploaded, header=1)
-        target_cols = ['Trip Date', 'Passenger', 'From', 'To', 'Customer', 'Cust. Ref.', 'Base Rate']
-        cleaned_df = df[target_cols]
-        cleaned_df = cleaned_df.dropna(subset=['Base Rate'])
-        cleaned_df['Base Rate'] = cleaned_df['Base Rate'].replace(',', '', regex=True).astype(float)
-        last_value = cleaned_df['Base Rate'].iloc[-1]
-        sum_except_last = cleaned_df['Base Rate'].iloc[:-1].sum()
-        if abs(last_value - sum_except_last) < 1.0:
-            cleaned_df = cleaned_df.iloc[:-1]
-
-        if mode == "Auto from Excel":
-            booking_count = cleaned_df.shape[0]
-            total_amount_dkk = cleaned_df['Base Rate'].sum()
-
-    if mode == "Manual":
-        total_amount_dkk = st.number_input("Manual Total Amount", min_value=0.0, step=100.0)
-        booking_count = st.number_input("Manual Number of Bookings", min_value=0)
-
-    if mode == "Auto from Excel" and currency in ["EUR", "USD", "GBP"]:
-        converted = convert_currency(total_amount_dkk, currency)
-        st.markdown(f"**Converted Amount (for PDF):** {converted:,.2f} {currency}")
-
-    if st.button("Generate Invoice"):
-        if not receiver or not invoice_number:
-            st.error("Customer and Invoice Number are required.")
-        else:
-            if not cleaned_df.empty:
-                buffer = BytesIO()
-                cleaned_df.to_excel(buffer, index=False, engine="openpyxl")
-                buffer.seek(0)
-                wb = load_workbook(buffer)
-                ws = wb.active
-                bold_font = Font(bold=True)
-                for cell in ws[1]:
-                    cell.font = bold_font
-                for col in ws.columns:
-                    max_length = max(len(str(cell.value)) for cell in col if cell.value)
-                    ws.column_dimensions[col[0].column_letter].width = max_length + 2
-                ws.append(["", "", "", "", "", "Total", cleaned_df['Base Rate'].sum()])
-                final_buffer = BytesIO()
-                wb.save(final_buffer)
-
-                st.download_button(
-                    label="⬇️ Download Specification XLSX",
-                    data=final_buffer.getvalue(),
-                    file_name=f"SERVICE SPECIFICATION FOR INVOICE {invoice_number}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                )
-
-            final_total = convert_currency(total_amount_dkk, currency) if mode == "Auto from Excel" and currency in ["EUR", "USD", "GBP"] else total_amount_dkk
-
-            pdf_bytes = generate_invoice_pdf(
-                receiver, invoice_number, currency, invoice_purpose,
-                final_total, booking_count, due_date
-            )
-            st.download_button(
-                label="⬇️ Download PDF Invoice",
-                data=pdf_bytes,
-                file_name=f"Invoice {invoice_number} for {receiver.name}.pdf",
-                mime="application/pdf"
             )
