@@ -190,7 +190,7 @@ if mode == "Manual":
     booking_count = st.number_input("Manual Number of Bookings", min_value=0)
 
     
-        if st.button("Generate Invoice"):
+            if st.button("Generate Invoice"):
     if not receiver or not invoice_number:
         st.error("Customer and Invoice Number are required.")
     else:
