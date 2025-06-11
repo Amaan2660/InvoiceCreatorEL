@@ -49,6 +49,16 @@ def delete_customer(id):
         session.query(Customer).filter(Customer.id == id).delete()
         session.commit()
 
+# ------------------- CURRENCY CONVERSION -------------------
+def convert_currency(amount_dkk, target_currency):
+    rates = {
+        "EUR": 7.5,
+        "USD": 6.5,
+        "GBP": 8.8
+    }
+    rate = rates.get(target_currency)
+    return round(amount_dkk / rate, 2) if rate else amount_dkk
+
 # ------------------- PDF GENERATION -------------------
 def generate_invoice_pdf(receiver, invoice_number, currency, description, total_amount, booking_count, due_date):
     pdf = FPDF()
@@ -119,16 +129,6 @@ Email: limoexpresscph@gmail.com""")
 
     return pdf.output(dest="S").encode("latin-1")
 
-# ------------------- CURRENCY CONVERSION -------------------
-def convert_currency(amount_dkk, target_currency):
-    rates = {
-        "EUR": 7.5,
-        "USD": 6.5,
-        "GBP": 8.8
-    }
-    rate = rates.get(target_currency)
-    return round(amount_dkk / rate, 2) if rate else amount_dkk
-
 # ------------------- STREAMLIT UI -------------------
 st.set_page_config("InvoiceCreatorEL", layout="centered")
 st.title("\U0001F4C4 Invoice Creator EL")
@@ -145,7 +145,7 @@ with tab1:
     mode = st.radio("Select Amount Mode", ["Manual", "Auto from Excel"])
 
     uploaded = st.file_uploader("Upload Excel File", type=["xlsx"])
-    total_amount = 0.0
+    total_amount_dkk = 0.0
     booking_count = 0
     cleaned_df = pd.DataFrame()
 
@@ -162,13 +162,15 @@ with tab1:
 
         if mode == "Auto from Excel":
             booking_count = cleaned_df.shape[0]
-            total_amount = cleaned_df['Base Rate'].sum()
-            if currency in ["EUR", "USD", "GBP"]:
-                total_amount = convert_currency(total_amount, currency)
+            total_amount_dkk = cleaned_df['Base Rate'].sum()
 
     if mode == "Manual":
-        total_amount = st.number_input("Manual Total Amount", min_value=0.0, step=100.0)
+        total_amount_dkk = st.number_input("Manual Total Amount", min_value=0.0, step=100.0)
         booking_count = st.number_input("Manual Number of Bookings", min_value=0)
+
+    if mode == "Auto from Excel" and currency in ["EUR", "USD", "GBP"]:
+        converted = convert_currency(total_amount_dkk, currency)
+        st.markdown(f"**Converted Amount (for PDF):** {converted:,.2f} {currency}")
 
     if st.button("Generate Invoice"):
         if not receiver or not invoice_number:
@@ -197,9 +199,11 @@ with tab1:
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
 
+            final_total = convert_currency(total_amount_dkk, currency) if mode == "Auto from Excel" and currency in ["EUR", "USD", "GBP"] else total_amount_dkk
+
             pdf_bytes = generate_invoice_pdf(
                 receiver, invoice_number, currency, invoice_purpose,
-                total_amount, booking_count, due_date
+                final_total, booking_count, due_date
             )
             st.download_button(
                 label="⬇️ Download PDF Invoice",
@@ -207,3 +211,4 @@ with tab1:
                 file_name=f"Invoice {invoice_number} for {receiver.name}.pdf",
                 mime="application/pdf"
             )
+
