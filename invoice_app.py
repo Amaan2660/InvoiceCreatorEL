@@ -1,3 +1,5 @@
+# Updated Streamlit Invoice App with Clean PDF Layout and Excel Features
+
 import datetime
 import pandas as pd
 from fpdf import FPDF
@@ -5,6 +7,8 @@ from io import BytesIO
 import streamlit as st
 from sqlalchemy import create_engine, Column, String, Integer, Boolean
 from sqlalchemy.orm import declarative_base, sessionmaker
+from openpyxl import load_workbook
+from openpyxl.styles import Font
 
 # ------------------- DATABASE SETUP -------------------
 DB_URL = st.secrets["SUPABASE_DB_URL"]
@@ -46,14 +50,22 @@ def delete_customer(id):
         session.commit()
 
 # ------------------- PDF GENERATION -------------------
-def generate_invoice_pdf(receiver, invoice_number, currency, description, total_amount, booking_count):
+def generate_invoice_pdf(receiver, invoice_number, currency, description, total_amount, booking_count, due_date):
     pdf = FPDF()
     pdf.add_page()
-    pdf.image("logo.png", x=10, y=8, w=50)
-    pdf.set_xy(120, 8)
-    pdf.set_font("Helvetica", size=10)
-    pdf.multi_cell(80, 5, """
-From:
+
+    try:
+        pdf.image("logo.png", x=10, y=8, w=40)
+    except RuntimeError:
+        pass
+
+    pdf.set_font("Helvetica", "B", 20)
+    pdf.set_xy(150, 10)
+    pdf.cell(0, 10, f"INVOICE {invoice_number}", ln=True)
+
+    pdf.set_font("Helvetica", size=11)
+    pdf.set_xy(10, 30)
+    pdf.multi_cell(90, 6, """From:
 Limousine Service Xpress ApS
 Industriholmen 82
 2650 Hvidovre
@@ -61,44 +73,50 @@ Denmark
 CVR: DK45247961
 IBAN: LT87 3250 0345 4552 5735
 SWIFT: REVOLT21
-Email: limoexpresscph@gmail.com
-    """)
+Email: limoexpresscph@gmail.com""")
 
-    pdf.ln(30)
-    pdf.set_font("Helvetica", "B", 16)
-    pdf.cell(0, 10, "INVOICE", ln=True)
-
-    today = datetime.date.today().strftime("%Y-%m-%d")
-    pdf.set_font("Helvetica", size=11)
-    pdf.cell(0, 6, f"Invoice #: {invoice_number}", ln=True)
-    pdf.cell(0, 6, f"Date: {today}", ln=True)
-    if description:
-        pdf.multi_cell(0, 6, f"Description: {description}")
-    pdf.ln(3)
-
-    pdf.set_font("Helvetica", "B", 12)
-    pdf.cell(0, 6, "To:", ln=True)
-    pdf.set_font("Helvetica", size=11)
-    pdf.multi_cell(0, 6, f"{receiver.name}\n{receiver.address}")
+    pdf.set_xy(120, 30)
+    to_lines = ["To:", receiver.name]
     if receiver.contact:
-        pdf.cell(0, 6, f"Contact: {receiver.contact}", ln=True)
+        to_lines.append(f"Att: {receiver.contact}")
+    if receiver.address:
+        to_lines.append(receiver.address)
     if receiver.vat and receiver.is_company:
-        pdf.cell(0, 6, f"VAT No: {receiver.vat}", ln=True)
-    pdf.cell(0, 6, f"Email: {receiver.email}", ln=True)
-    pdf.ln(6)
+        to_lines.append(f"VAT No: {receiver.vat}")
+    to_lines.append(f"Email: {receiver.email}")
+    pdf.multi_cell(0, 6, "\n".join(to_lines))
+
+    pdf.set_xy(10, 100)
+    today = datetime.date.today().strftime("%d/%m/%Y")
+    due_date_fmt = due_date.strftime("%d/%m/%Y")
+    pdf.cell(0, 6, f"Invoice Date: {today}", ln=True)
+    pdf.cell(0, 6, f"Due Date: {due_date_fmt}", ln=True)
+    pdf.cell(0, 6, f"Currency: {currency}", ln=True)
+    pdf.ln(10)
 
     pdf.set_font("Helvetica", "B", 12)
-    pdf.cell(100, 8, "Service", border=1)
-    pdf.cell(40, 8, "Qty", border=1)
-    pdf.cell(40, 8, "Amount", border=1, ln=True)
+    pdf.cell(120, 8, "Description", border=1)
+    pdf.cell(30, 8, "Qty", border=1)
+    pdf.cell(40, 8, "Total", border=1, ln=True)
+
     pdf.set_font("Helvetica", size=11)
-    pdf.cell(100, 8, description or "Transfers", border=1)
-    pdf.cell(40, 8, str(booking_count), border=1)
-    pdf.cell(40, 8, f"{currency} {total_amount:.2f}", border=1, ln=True)
+    pdf.cell(120, 8, description or "Transfers", border=1)
+    pdf.cell(30, 8, str(booking_count), border=1)
+    pdf.cell(40, 8, f"{total_amount:,.2f} {currency}", border=1, ln=True)
+
+    pdf.ln(8)
+    pdf.set_font("Helvetica", "B", 11)
+    pdf.cell(150, 8, "Subtotal:", border=0)
+    pdf.cell(40, 8, f"{float(total_amount):,.2f} {currency}", ln=True)
 
     pdf.set_font("Helvetica", "B", 12)
-    pdf.cell(140, 8, "Total", border=1)
-    pdf.cell(40, 8, f"{currency} {total_amount:.2f}", border=1, ln=True)
+    pdf.cell(150, 8, "Total Amount Due:", border=0)
+    pdf.cell(40, 8, f"{total_amount:,.2f} {currency}", ln=True)
+
+    pdf.ln(10)
+    pdf.set_font("Helvetica", style="I", size=10)
+    pdf.cell(0, 6, f"Please add invoice number {invoice_number} as reference when making payment.", ln=True)
+
     return pdf.output(dest="S").encode("latin-1")
 
 # ------------------- STREAMLIT UI -------------------
@@ -153,33 +171,55 @@ with tab1:
     invoice_number = st.text_input("Invoice Number")
     currency = st.selectbox("Currency", ["DKK", "EUR", "USD", "GBP"])
     invoice_purpose = st.text_input("Invoice Description (e.g. Transfers in May 2025)")
-    manual_total = st.number_input("Manual Total Amount", min_value=0.0, step=100.0)
-    manual_bookings = st.number_input("Manual Number of Bookings", min_value=0)
+    due_date = st.date_input("Due Date")
+    mode = st.radio("Select Amount Mode", ["Manual", "Auto from Excel"])
 
-    uploaded = st.file_uploader("Upload original Excel (with all columns)", type=["xlsx"])
-    finalised = st.file_uploader("Upload finalised Excel (with desired columns)", type=["xlsx"])
+    uploaded = st.file_uploader("Upload Excel File", type=["xlsx"])
+    total_amount = 0.0
+    booking_count = 0
+
+    if uploaded and mode == "Auto from Excel":
+        df = pd.read_excel(uploaded, header=1)
+        target_cols = ['Trip Date', 'Passenger', 'From', 'To', 'Customer', 'Cust. Ref.', 'Base Rate']
+        cleaned_df = df[target_cols]
+        booking_count = len(cleaned_df)
+        total_amount = cleaned_df['Base Rate'].sum()
+
+    if mode == "Manual":
+        total_amount = st.number_input("Manual Total Amount", min_value=0.0, step=100.0)
+        booking_count = st.number_input("Manual Number of Bookings", min_value=0)
 
     if st.button("Generate Invoice"):
         if not receiver or not invoice_number:
             st.error("Customer and Invoice Number are required.")
         else:
-            pdf_bytes = generate_invoice_pdf(receiver, invoice_number, currency, invoice_purpose, manual_total, manual_bookings)
-
-            if uploaded and finalised:
-                df_original = pd.read_excel(uploaded, header=0)
-                df_finalised = pd.read_excel(finalised, header=0)
-                final_cols = [col for col in df_finalised.columns if col in df_original.columns]
-                cleaned_df = df_original[final_cols]
-
+            if uploaded and mode == "Auto from Excel":
                 buffer = BytesIO()
                 cleaned_df.to_excel(buffer, index=False, engine="openpyxl")
+                buffer.seek(0)
+                wb = load_workbook(buffer)
+                ws = wb.active
+                bold_font = Font(bold=True)
+                for cell in ws[1]:
+                    cell.font = bold_font
+                for col in ws.columns:
+                    max_length = max(len(str(cell.value)) for cell in col if cell.value)
+                    ws.column_dimensions[col[0].column_letter].width = max_length + 2
+                ws.append(["", "", "", "", "", "Total", total_amount])
+                final_buffer = BytesIO()
+                wb.save(final_buffer)
+
                 st.download_button(
                     label="⬇️ Download Specification XLSX",
-                    data=buffer.getvalue(),
+                    data=final_buffer.getvalue(),
                     file_name=f"SERVICE SPECIFICATION FOR INVOICE {invoice_number}.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
 
+            pdf_bytes = generate_invoice_pdf(
+                receiver, invoice_number, currency, invoice_purpose,
+                total_amount, booking_count, due_date
+            )
             st.download_button(
                 label="⬇️ Download PDF Invoice",
                 data=pdf_bytes,
