@@ -180,9 +180,8 @@ with tab1:
     cleaned_df = pd.DataFrame()
 
     if uploaded:
-        raw_df = pd.read_excel(uploaded, header=None)
-        header_row = raw_df.iloc[0].values
-        df = pd.DataFrame(raw_df.values[1:], columns=header_row)
+        df = pd.read_excel(uploaded, header=0)
+        df.columns = df.columns.astype(str).str.strip().str.replace('\n', ' ')
 
         target_cols = ['Trip Date', 'Passenger', 'From', 'To', 'Customer', 'Cust. Ref.', 'Base Rate']
         cleaned_df = df[target_cols].copy()
