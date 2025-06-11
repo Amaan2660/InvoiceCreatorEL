@@ -179,35 +179,35 @@ with tab1:
     booking_count = 0
 
     if uploaded:
-        buffer = BytesIO()
-        cleaned_df.to_excel(buffer, index=False, engine="openpyxl")
-        buffer.seek(0)
-        wb = load_workbook(buffer)
-        ws = wb.active
-        bold_font = Font(bold=True)
-        for cell in ws[1]:
-            cell.font = bold_font
-        for col in ws.columns:
-            max_length = max(len(str(cell.value)) for cell in col if cell.value)
-            ws.column_dimensions[col[0].column_letter].width = max_length + 2
-        ws.append(["", "", "", "", "", "Total", total_amount])
-        final_buffer = BytesIO()
-        wb.save(final_buffer)
+    buffer = BytesIO()
+    cleaned_df.to_excel(buffer, index=False, engine="openpyxl")
+    buffer.seek(0)
+    wb = load_workbook(buffer)
+    ws = wb.active
+    bold_font = Font(bold=True)
+    for cell in ws[1]:
+        cell.font = bold_font
+    for col in ws.columns:
+        max_length = max(len(str(cell.value)) for cell in col if cell.value)
+        ws.column_dimensions[col[0].column_letter].width = max_length + 2
+    ws.append(["", "", "", "", "", "Total", total_amount])
+    final_buffer = BytesIO()
+    wb.save(final_buffer)
 
-        st.download_button(
-            label="⬇️ Download Specification XLSX",
-            data=final_buffer.getvalue(),
-            file_name=f"SERVICE SPECIFICATION FOR INVOICE {invoice_number}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
-
-    pdf_bytes = generate_invoice_pdf(
-        receiver, invoice_number, currency, invoice_purpose,
-        total_amount, booking_count, due_date
-    )
     st.download_button(
-        label="⬇️ Download PDF Invoice",
-        data=pdf_bytes,
-        file_name=f"Invoice {invoice_number} for {receiver.name}.pdf",
-        mime="application/pdf"
-    )
+                    label="⬇️ Download Specification XLSX",
+                    data=final_buffer.getvalue(),
+                    file_name=f"SERVICE SPECIFICATION FOR INVOICE {invoice_number}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+
+            pdf_bytes = generate_invoice_pdf(
+                receiver, invoice_number, currency, invoice_purpose,
+                total_amount, booking_count, due_date
+            )
+            st.download_button(
+                label="⬇️ Download PDF Invoice",
+                data=pdf_bytes,
+                file_name=f"Invoice {invoice_number} for {receiver.name}.pdf",
+                mime="application/pdf"
+            )
