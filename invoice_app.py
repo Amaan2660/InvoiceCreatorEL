@@ -66,7 +66,7 @@ Email: limoexpresscph@gmail.com
 
     pdf.ln(30)
     pdf.set_font("Helvetica", "B", 16)
-    pdf.cell(0, 10, "INVOICE {invoice_number}", ln=True)
+    pdf.cell(0, 10, "INVOICE", ln=True)
 
     today = datetime.date.today().strftime("%Y-%m-%d")
     pdf.set_font("Helvetica", size=11)
