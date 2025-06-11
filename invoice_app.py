@@ -183,13 +183,15 @@ with tab1:
         df = pd.read_excel(uploaded, header=1)
         target_cols = ['Trip Date', 'Passenger', 'From', 'To', 'Customer', 'Cust. Ref.', 'Base Rate']
         cleaned_df = df[target_cols].copy()
-        cleaned_df = cleaned_df[pd.to_numeric(cleaned_df['Base Rate'], errors='coerce').notna()]
-        cleaned_df['Base Rate'] = cleaned_df['Base Rate'].astype(float)
+        cleaned_df['Base Rate'] = pd.to_numeric(cleaned_df['Base Rate'], errors='coerce')
+        cleaned_df.dropna(subset=['Base Rate'], inplace=True)
+
+        # New strict logic: drop last row if all fields except 'Base Rate' are NaN
         if len(cleaned_df) > 1:
-            possible_total = cleaned_df.iloc[-1]['Base Rate']
-            calculated_sum = cleaned_df.iloc[:-1]['Base Rate'].sum()
-            if abs(possible_total - calculated_sum) < 1.0:
+            last_row = cleaned_df.iloc[-1]
+            if all(pd.isna(last_row[col]) for col in cleaned_df.columns if col != 'Base Rate'):
                 cleaned_df = cleaned_df.iloc[:-1]
+
         if mode == "Auto from Excel":
             booking_count = len(cleaned_df)
             total_amount = float(cleaned_df['Base Rate'].sum())
