@@ -177,40 +177,29 @@ with tab1:
     uploaded = st.file_uploader("Upload Excel File", type=["xlsx"])
     total_amount = 0.0
     booking_count = 0
-    cleaned_df = pd.DataFrame()
 
-    if uploaded:
-        df = pd.read_excel(uploaded, header=0)
-        df.columns = df.columns.astype(str).str.strip().str.replace('\n', ' ')
-
+    if uploaded and mode == "Auto from Excel":
+        df = pd.read_excel(uploaded, header=1)
         target_cols = ['Trip Date', 'Passenger', 'From', 'To', 'Customer', 'Cust. Ref.', 'Base Rate']
-        cleaned_df = df[target_cols].copy()
-        cleaned_df['Base Rate'] = pd.to_numeric(cleaned_df['Base Rate'], errors='coerce')
-        cleaned_df.dropna(subset=['Base Rate'], inplace=True)
-
-        if len(cleaned_df) > 1:
-            last_row = cleaned_df.iloc[-1]
-            if all(pd.isna(last_row[col]) for col in cleaned_df.columns if col != 'Base Rate'):
-                cleaned_df = cleaned_df.iloc[:-1]
-
-        if mode == "Auto from Excel":
-            booking_count = len(cleaned_df)
-            total_amount = float(cleaned_df['Base Rate'].sum())
+        cleaned_df = df[target_cols]
+        cleaned_df = cleaned_df.dropna(subset=['Base Rate'])
+        cleaned_df['Base Rate'] = cleaned_df['Base Rate'].replace(',', '', regex=True).astype(float)
+        last_value = cleaned_df['Base Rate'].iloc[-1]
+        sum_except_last = cleaned_df['Base Rate'].iloc[:-1].sum()
+        if abs(last_value - sum_except_last) < 1.0:
+            cleaned_df = cleaned_df.iloc[:-1]
+        booking_count = cleaned_df.shape[0]
+        total_amount = cleaned_df['Base Rate'].sum()
 
     if mode == "Manual":
-        manual_total = st.number_input("Manual Total Amount", min_value=0.0, step=100.0)
-        manual_count = st.number_input("Manual Number of Bookings", min_value=0)
-        total_amount = manual_total
-        booking_count = manual_count
+        total_amount = st.number_input("Manual Total Amount", min_value=0.0, step=100.0)
+        booking_count = st.number_input("Manual Number of Bookings", min_value=0)
 
     if st.button("Generate Invoice"):
         if not receiver or not invoice_number:
             st.error("Customer and Invoice Number are required.")
         else:
-            if not cleaned_df.empty:
-                st.subheader("Preview of Specification Data")
-                st.dataframe(cleaned_df)
-
+            if uploaded and mode == "Auto from Excel":
                 buffer = BytesIO()
                 cleaned_df.to_excel(buffer, index=False, engine="openpyxl")
                 buffer.seek(0)
@@ -222,7 +211,7 @@ with tab1:
                 for col in ws.columns:
                     max_length = max(len(str(cell.value)) for cell in col if cell.value)
                     ws.column_dimensions[col[0].column_letter].width = max_length + 2
-                ws.append(["", "", "", "", "", "Total", cleaned_df['Base Rate'].sum()])
+                ws.append(["", "", "", "", "", "Total", total_amount])
                 final_buffer = BytesIO()
                 wb.save(final_buffer)
 
