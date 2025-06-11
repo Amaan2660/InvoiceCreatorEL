@@ -49,7 +49,6 @@ def delete_customer(id):
 def generate_invoice_pdf(receiver, invoice_number, currency, description, total_amount, booking_count):
     pdf = FPDF()
     pdf.add_page()
-
     pdf.image("logo.png", x=10, y=8, w=50)
     pdf.set_xy(120, 8)
     pdf.set_font("Helvetica", size=10)
@@ -156,7 +155,9 @@ with tab1:
     invoice_purpose = st.text_input("Invoice Description (e.g. Transfers in May 2025)")
     manual_total = st.number_input("Manual Total Amount", min_value=0.0, step=100.0)
     manual_bookings = st.number_input("Manual Number of Bookings", min_value=0)
-    uploaded = st.file_uploader("Upload trip data (Excel)", type=["xlsx"])
+
+    uploaded = st.file_uploader("Upload original Excel (with all columns)", type=["xlsx"])
+    finalised = st.file_uploader("Upload finalised Excel (with desired columns)", type=["xlsx"])
 
     if st.button("Generate Invoice"):
         if not receiver or not invoice_number:
@@ -164,25 +165,23 @@ with tab1:
         else:
             pdf_bytes = generate_invoice_pdf(receiver, invoice_number, currency, invoice_purpose, manual_total, manual_bookings)
 
-            if uploaded:
-                df_uploaded = pd.read_excel(uploaded, header=0)
-                if "Unnamed: 0" in df_uploaded.columns:
-                    df_uploaded.drop(columns=["Unnamed: 0"], inplace=True)
-                keep_cols = ["Trip Date", "Passenger", "From", "To", "Cust. Ref."]
-                cleaned = df_uploaded[[c for c in keep_cols if c in df_uploaded.columns]].copy()
-                cleaned.rename(columns={"Cust. Ref.": "Customer Reference"}, inplace=True)
-                buffer = BytesIO()
-                cleaned.to_excel(buffer, index=False, engine="openpyxl")
+            if uploaded and finalised:
+                df_original = pd.read_excel(uploaded, header=0)
+                df_finalised = pd.read_excel(finalised, header=0)
+                final_cols = [col for col in df_finalised.columns if col in df_original.columns]
+                cleaned_df = df_original[final_cols]
 
+                buffer = BytesIO()
+                cleaned_df.to_excel(buffer, index=False, engine="openpyxl")
                 st.download_button(
-                    label="⬇️ Download Specification XLSX",
+                    label="\u2B07\uFE0F Download Specification XLSX",
                     data=buffer.getvalue(),
                     file_name=f"SERVICE SPECIFICATION FOR INVOICE {invoice_number}.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
 
             st.download_button(
-                label="⬇️ Download PDF Invoice",
+                label="\u2B07\uFE0F Download PDF Invoice",
                 data=pdf_bytes,
                 file_name=f"Invoice {invoice_number} for {receiver.name}.pdf",
                 mime="application/pdf"
