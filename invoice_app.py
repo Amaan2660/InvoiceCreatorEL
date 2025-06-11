@@ -1,3 +1,5 @@
+# Updated Streamlit Invoice App with Auto-Cleaning and Optional Auto Calculation
+
 import datetime
 import pandas as pd
 from fpdf import FPDF
@@ -66,7 +68,7 @@ Email: limoexpresscph@gmail.com
 
     pdf.ln(30)
     pdf.set_font("Helvetica", "B", 16)
-    pdf.cell(0, 10, "INVOICE", ln=True)
+    pdf.cell(0, 10, f"INVOICE {invoice_number}", ln=True)
 
     today = datetime.date.today().strftime("%Y-%m-%d")
     pdf.set_font("Helvetica", size=11)
@@ -153,35 +155,44 @@ with tab1:
     invoice_number = st.text_input("Invoice Number")
     currency = st.selectbox("Currency", ["DKK", "EUR", "USD", "GBP"])
     invoice_purpose = st.text_input("Invoice Description (e.g. Transfers in May 2025)")
-    manual_total = st.number_input("Manual Total Amount", min_value=0.0, step=100.0)
-    manual_bookings = st.number_input("Manual Number of Bookings", min_value=0)
 
-    uploaded = st.file_uploader("Upload original Excel (with all columns)", type=["xlsx"])
-    finalised = st.file_uploader("Upload finalised Excel (with desired columns)", type=["xlsx"])
+    auto_mode = st.radio("Invoice Calculation Mode", ["Manual", "Auto from Excel"])
+
+    if auto_mode == "Manual":
+        manual_total = st.number_input("Manual Total Amount", min_value=0.0, step=100.0)
+        manual_bookings = st.number_input("Manual Number of Bookings", min_value=0)
+
+    uploaded = st.file_uploader("Upload Excel File (Auto Clean)", type=["xlsx"])
 
     if st.button("Generate Invoice"):
         if not receiver or not invoice_number:
             st.error("Customer and Invoice Number are required.")
+        elif not uploaded:
+            st.error("Please upload a file.")
         else:
-            pdf_bytes = generate_invoice_pdf(receiver, invoice_number, currency, invoice_purpose, manual_total, manual_bookings)
+            df = pd.read_excel(uploaded, header=1)
+            cleaned_df = df.dropna(how="all", axis=1)
 
-            if uploaded and finalised:
-                df_original = pd.read_excel(uploaded, header=0)
-                df_finalised = pd.read_excel(finalised, header=0)
-                final_cols = [col for col in df_finalised.columns if col in df_original.columns]
-                cleaned_df = df_original[final_cols]
+            total_amount = manual_total
+            booking_count = manual_bookings
 
-                buffer = BytesIO()
-                cleaned_df.to_excel(buffer, index=False, engine="openpyxl")
-                st.download_button(
-                    label="\u2B07\uFE0F Download Specification XLSX",
-                    data=buffer.getvalue(),
-                    file_name=f"SERVICE SPECIFICATION FOR INVOICE {invoice_number}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                )
+            if auto_mode == "Auto from Excel":
+                booking_count = len(cleaned_df)
+                total_amount = booking_count * 395  # default per transfer pricing
+
+            pdf_bytes = generate_invoice_pdf(receiver, invoice_number, currency, invoice_purpose, total_amount, booking_count)
+
+            buffer = BytesIO()
+            cleaned_df.to_excel(buffer, index=False, engine="openpyxl")
+            st.download_button(
+                label="⬇️ Download Specification XLSX",
+                data=buffer.getvalue(),
+                file_name=f"SERVICE SPECIFICATION FOR INVOICE {invoice_number}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
 
             st.download_button(
-                label="\u2B07\uFE0F Download PDF Invoice",
+                label="⬇️ Download PDF Invoice",
                 data=pdf_bytes,
                 file_name=f"Invoice {invoice_number} for {receiver.name}.pdf",
                 mime="application/pdf"
