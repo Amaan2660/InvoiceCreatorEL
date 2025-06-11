@@ -54,7 +54,10 @@ def generate_invoice_pdf(receiver, invoice_number, currency, description, total_
     pdf = FPDF()
     pdf.add_page()
 
-    pdf.image("logo.png", x=10, y=8, w=40)
+    try:
+        pdf.image("logo.png", x=10, y=8, w=40)
+    except RuntimeError:
+        pass
 
     pdf.set_font("Helvetica", "B", 20)
     pdf.set_xy(150, 10)
