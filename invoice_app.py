@@ -68,7 +68,7 @@ Email: limoexpresscph@gmail.com
 
     pdf.ln(30)
     pdf.set_font("Helvetica", "B", 16)
-    pdf.cell(0, 10, f"INVOICE {invoice_number}", ln=True)
+    pdf.cell(0, 10, "INVOICE", ln=True)
 
     today = datetime.date.today().strftime("%Y-%m-%d")
     pdf.set_font("Helvetica", size=11)
@@ -158,6 +158,9 @@ with tab1:
 
     auto_mode = st.radio("Invoice Calculation Mode", ["Manual", "Auto from Excel"])
 
+    manual_total = 0.0
+    manual_bookings = 0
+
     if auto_mode == "Manual":
         manual_total = st.number_input("Manual Total Amount", min_value=0.0, step=100.0)
         manual_bookings = st.number_input("Manual Number of Bookings", min_value=0)
@@ -178,7 +181,7 @@ with tab1:
 
             if auto_mode == "Auto from Excel":
                 booking_count = len(cleaned_df)
-                total_amount = booking_count * 395  # default per transfer pricing
+                total_amount = booking_count * 395
 
             pdf_bytes = generate_invoice_pdf(receiver, invoice_number, currency, invoice_purpose, total_amount, booking_count)
 
