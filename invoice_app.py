@@ -8,6 +8,7 @@ import streamlit as st
 from sqlalchemy import create_engine, Column, String, Integer, Boolean
 from sqlalchemy.orm import declarative_base, sessionmaker
 from openpyxl import load_workbook
+from openpyxl.styles import Font
 
 # ------------------- DATABASE SETUP -------------------
 DB_URL = st.secrets["SUPABASE_DB_URL"]
@@ -52,11 +53,13 @@ def delete_customer(id):
 def generate_invoice_pdf(receiver, invoice_number, currency, description, total_amount, booking_count):
     pdf = FPDF()
     pdf.add_page()
-    pdf.image("logo.png", x=10, y=8, w=50)
-    pdf.set_xy(120, 8)
-    pdf.set_font("Helvetica", size=10)
-    pdf.multi_cell(80, 5, """
-From:
+
+    pdf.set_font("Helvetica", "B", 16)
+    pdf.cell(0, 10, f"INVOICE {invoice_number}", ln=True)
+    pdf.ln(5)
+
+    pdf.set_font("Helvetica", size=11)
+    pdf.multi_cell(0, 6, """
 Limousine Service Xpress ApS
 Industriholmen 82
 2650 Hvidovre
@@ -67,41 +70,41 @@ SWIFT: REVOLT21
 Email: limoexpresscph@gmail.com
     """)
 
-    pdf.ln(30)
-    pdf.set_font("Helvetica", "B", 16)
-    pdf.cell(0, 10, "INVOICE", ln=True)
+    pdf.ln(4)
+    pdf.set_font("Helvetica", "B", 12)
+    pdf.cell(0, 6, receiver.name, ln=True)
+    pdf.set_font("Helvetica", size=11)
+    if receiver.contact:
+        pdf.cell(0, 6, f"Att: {receiver.contact}", ln=True)
+    if receiver.address:
+        pdf.multi_cell(0, 6, receiver.address)
+    pdf.cell(0, 6, f"Email: {receiver.email}", ln=True)
+    pdf.ln(5)
 
     today = datetime.date.today().strftime("%Y-%m-%d")
-    pdf.set_font("Helvetica", size=11)
-    pdf.cell(0, 6, f"Invoice #: {invoice_number}", ln=True)
+    pdf.cell(0, 6, f"Invoice No.: {invoice_number}", ln=True)
     pdf.cell(0, 6, f"Date: {today}", ln=True)
-    if description:
-        pdf.multi_cell(0, 6, f"Description: {description}")
-    pdf.ln(3)
+    pdf.cell(0, 6, f"Currency: {currency}", ln=True)
+    pdf.ln(10)
 
     pdf.set_font("Helvetica", "B", 12)
-    pdf.cell(0, 6, "To:", ln=True)
+    pdf.cell(120, 8, "Description", border=1)
+    pdf.cell(30, 8, "Qty", border=1)
+    pdf.cell(40, 8, "Total", border=1, ln=True)
+
     pdf.set_font("Helvetica", size=11)
-    pdf.multi_cell(0, 6, f"{receiver.name}\n{receiver.address}")
-    if receiver.contact:
-        pdf.cell(0, 6, f"Contact: {receiver.contact}", ln=True)
-    if receiver.vat and receiver.is_company:
-        pdf.cell(0, 6, f"VAT No: {receiver.vat}", ln=True)
-    pdf.cell(0, 6, f"Email: {receiver.email}", ln=True)
-    pdf.ln(6)
+    pdf.cell(120, 8, description or "Transfers", border=1)
+    pdf.cell(30, 8, str(booking_count), border=1)
+    pdf.cell(40, 8, f"{total_amount:.2f} {currency}", border=1, ln=True)
+
+    pdf.set_font("Helvetica", "B", 11)
+    pdf.cell(150, 8, "Subtotal:", border=0)
+    pdf.cell(40, 8, f"{total_amount:.2f} {currency}", ln=True)
 
     pdf.set_font("Helvetica", "B", 12)
-    pdf.cell(100, 8, "Service", border=1)
-    pdf.cell(40, 8, "Qty", border=1)
-    pdf.cell(40, 8, "Amount", border=1, ln=True)
-    pdf.set_font("Helvetica", size=11)
-    pdf.cell(100, 8, description or "Transfers", border=1)
-    pdf.cell(40, 8, str(booking_count), border=1)
-    pdf.cell(40, 8, f"{currency} {total_amount:.2f}", border=1, ln=True)
+    pdf.cell(150, 8, "Total Amount Due:", border=0)
+    pdf.cell(40, 8, f"{total_amount:.2f} {currency}", ln=True)
 
-    pdf.set_font("Helvetica", "B", 12)
-    pdf.cell(140, 8, "Total", border=1)
-    pdf.cell(40, 8, f"{currency} {total_amount:.2f}", border=1, ln=True)
     return pdf.output(dest="S").encode("latin-1")
 
 # ------------------- STREAMLIT UI -------------------
@@ -185,12 +188,18 @@ with tab1:
                 booking_count = len(cleaned_df)
                 total_amount = booking_count * 395
 
-            # Save to BytesIO
+            # Add sum row
+            cleaned_df.loc[len(cleaned_df.index)] = ["", "", "", "", "", "Total:", cleaned_df["Base Rate"].sum()]
+
             buffer = BytesIO()
             cleaned_df.to_excel(buffer, index=False, engine="openpyxl")
             buffer.seek(0)
             wb = load_workbook(buffer)
             ws = wb.active
+
+            # Bold headers + auto width
+            for cell in ws[1]:
+                cell.font = Font(bold=True)
 
             for col in ws.columns:
                 max_length = max(len(str(cell.value)) if cell.value is not None else 0 for cell in col)
