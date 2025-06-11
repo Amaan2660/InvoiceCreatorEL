@@ -195,8 +195,10 @@ with tab1:
             total_amount = float(cleaned_df['Base Rate'].sum())
 
     if mode == "Manual":
-        total_amount = st.number_input("Manual Total Amount", min_value=0.0, step=100.0)
-        booking_count = st.number_input("Manual Number of Bookings", min_value=0)
+        manual_total = st.number_input("Manual Total Amount", min_value=0.0, step=100.0)
+        manual_count = st.number_input("Manual Number of Bookings", min_value=0)
+        total_amount = manual_total
+        booking_count = manual_count
 
     if st.button("Generate Invoice"):
         if not receiver or not invoice_number:
@@ -217,7 +219,7 @@ with tab1:
                 for col in ws.columns:
                     max_length = max(len(str(cell.value)) for cell in col if cell.value)
                     ws.column_dimensions[col[0].column_letter].width = max_length + 2
-                ws.append(["", "", "", "", "", "Total", total_amount])
+                ws.append(["", "", "", "", "", "Total", cleaned_df['Base Rate'].sum()])
                 final_buffer = BytesIO()
                 wb.save(final_buffer)
 
