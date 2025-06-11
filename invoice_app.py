@@ -177,8 +177,9 @@ with tab1:
     uploaded = st.file_uploader("Upload Excel File", type=["xlsx"])
     total_amount = 0.0
     booking_count = 0
+    cleaned_df = pd.DataFrame()
 
-    if uploaded and mode == "Auto from Excel":
+    if uploaded:
         df = pd.read_excel(uploaded, header=1)
         target_cols = ['Trip Date', 'Passenger', 'From', 'To', 'Customer', 'Cust. Ref.', 'Base Rate']
         cleaned_df = df[target_cols]
@@ -188,13 +189,12 @@ with tab1:
         sum_except_last = cleaned_df['Base Rate'].iloc[:-1].sum()
         if abs(last_value - sum_except_last) < 1.0:
             cleaned_df = cleaned_df.iloc[:-1]
-        booking_count = cleaned_df.shape[0]
-        total_amount = cleaned_df['Base Rate'].sum()
+
+        if mode == "Auto from Excel":
+            booking_count = cleaned_df.shape[0]
+            total_amount = cleaned_df['Base Rate'].sum()
 
     if mode == "Manual":
-         df = pd.read_excel(uploaded, header=1)
-        target_cols = ['Trip Date', 'Passenger', 'From', 'To', 'Customer', 'Cust. Ref.', 'Base Rate']
-        cleaned_df = df[target_cols]
         total_amount = st.number_input("Manual Total Amount", min_value=0.0, step=100.0)
         booking_count = st.number_input("Manual Number of Bookings", min_value=0)
 
@@ -202,7 +202,7 @@ with tab1:
         if not receiver or not invoice_number:
             st.error("Customer and Invoice Number are required.")
         else:
-            if uploaded and mode == "Auto from Excel":
+            if not cleaned_df.empty:
                 buffer = BytesIO()
                 cleaned_df.to_excel(buffer, index=False, engine="openpyxl")
                 buffer.seek(0)
@@ -214,7 +214,7 @@ with tab1:
                 for col in ws.columns:
                     max_length = max(len(str(cell.value)) for cell in col if cell.value)
                     ws.column_dimensions[col[0].column_letter].width = max_length + 2
-                ws.append(["", "", "", "", "", "Total", total_amount])
+                ws.append(["", "", "", "", "", "Total", cleaned_df['Base Rate'].sum()])
                 final_buffer = BytesIO()
                 wb.save(final_buffer)
 
