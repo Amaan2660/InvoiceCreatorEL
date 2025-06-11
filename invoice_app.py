@@ -59,6 +59,14 @@ def convert_currency(amount_dkk, target_currency):
     rate = rates.get(target_currency)
     return round(amount_dkk / rate, 2) if rate else amount_dkk
 
+def get_currency_note(currency):
+    rates = {
+        "EUR": 7.5,
+        "USD": 6.5,
+        "GBP": 8.8
+    }
+    return f"{currency} ({rates[currency]} DKK)" if currency in rates else currency
+
 # ------------------- PDF GENERATION -------------------
 def generate_invoice_pdf(receiver, invoice_number, currency, description, total_amount, booking_count, due_date):
     pdf = FPDF()
@@ -99,9 +107,10 @@ Email: limoexpresscph@gmail.com""")
     pdf.set_xy(10, 100)
     today = datetime.date.today().strftime("%d/%m/%Y")
     due_date_fmt = due_date.strftime("%d/%m/%Y")
+    currency_note = get_currency_note(currency)
     pdf.cell(0, 6, f"Invoice Date: {today}", ln=True)
     pdf.cell(0, 6, f"Due Date: {due_date_fmt}", ln=True)
-    pdf.cell(0, 6, f"Currency: {currency}", ln=True)
+    pdf.cell(0, 6, f"Currency: {currency_note}", ln=True)
     pdf.ln(10)
 
     pdf.set_font("Helvetica", "B", 12)
@@ -110,6 +119,8 @@ Email: limoexpresscph@gmail.com""")
     pdf.cell(40, 8, "Total", border=1, ln=True)
 
     pdf.set_font("Helvetica", size=11)
+    pdf.set_font_style("")
+    pdf.set_font("Helvetica", style="", size=11)
     pdf.cell(120, 8, description or "Transfers", border=1)
     pdf.cell(30, 8, str(booking_count), border=1)
     pdf.cell(40, 8, f"{total_amount:,.2f} {currency}", border=1, ln=True)
@@ -211,4 +222,3 @@ with tab1:
                 file_name=f"Invoice {invoice_number} for {receiver.name}.pdf",
                 mime="application/pdf"
             )
-
