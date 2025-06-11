@@ -88,7 +88,7 @@ Email: limoexpresscph@gmail.com""")
 
     pdf.set_xy(10, 100)
     today = datetime.date.today().strftime("%d/%m/%Y")
-    due_date_fmt = due_date.strftime("%d/%m/%Y")
+    due_date_fmt = due_date.strftime("%d/%m/%Y") if hasattr(due_date, "strftime") else str(due_date)
     pdf.cell(0, 6, f"Invoice Date: {today}", ln=True)
     pdf.cell(0, 6, f"Due Date: {due_date_fmt}", ln=True)
     pdf.cell(0, 6, f"Currency: {currency}", ln=True)
