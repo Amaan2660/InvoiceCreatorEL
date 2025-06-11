@@ -210,9 +210,6 @@ with tab1:
             data=final_buffer.getvalue(),
             file_name=f"SERVICE SPECIFICATION FOR INVOICE {invoice_number}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        ),
-            file_name=f"SERVICE SPECIFICATION FOR INVOICE {invoice_number}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
     if st.button("Generate Invoice"):
