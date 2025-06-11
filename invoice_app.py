@@ -184,7 +184,9 @@ with tab1:
         cleaned_df = df[target_cols]
         cleaned_df = cleaned_df.dropna(subset=['Base Rate'])
         cleaned_df['Base Rate'] = cleaned_df['Base Rate'].replace(',', '', regex=True).astype(float)
-        if pd.isna(pd.to_numeric(cleaned_df['Base Rate'].iloc[-1], errors='coerce')):
+        last_value = cleaned_df['Base Rate'].iloc[-1]
+        sum_except_last = cleaned_df['Base Rate'].iloc[:-1].sum()
+        if abs(last_value - sum_except_last) < 1.0:
             cleaned_df = cleaned_df.iloc[:-1]
         booking_count = cleaned_df.shape[0]
         total_amount = cleaned_df['Base Rate'].sum()
