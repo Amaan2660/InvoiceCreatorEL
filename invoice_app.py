@@ -192,6 +192,9 @@ with tab1:
         total_amount = cleaned_df['Base Rate'].sum()
 
     if mode == "Manual":
+         df = pd.read_excel(uploaded, header=1)
+        target_cols = ['Trip Date', 'Passenger', 'From', 'To', 'Customer', 'Cust. Ref.', 'Base Rate']
+        cleaned_df = df[target_cols]
         total_amount = st.number_input("Manual Total Amount", min_value=0.0, step=100.0)
         booking_count = st.number_input("Manual Number of Bookings", min_value=0)
 
