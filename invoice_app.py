@@ -173,8 +173,14 @@ with tab1:
         elif not uploaded:
             st.error("Please upload a file.")
         else:
+            # Use row 2 as headers (header=1)
             df = pd.read_excel(uploaded, header=1)
-            cleaned_df = df.dropna(how="all", axis=1)
+
+            # Select only these cleaned columns
+            selected_cols = [
+                "Trip Date", "Passenger", "From", "To", "Customer", "Cust. Ref.", "Base Rate"
+            ]
+            cleaned_df = df[selected_cols].copy()
 
             total_amount = manual_total if auto_mode == "Manual" else 0.0
             booking_count = manual_bookings if auto_mode == "Manual" else 0
