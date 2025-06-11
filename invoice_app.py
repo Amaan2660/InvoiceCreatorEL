@@ -83,8 +83,10 @@ def generate_invoice_pdf(receiver, invoice_number, currency, description, total_
 
     pdf.set_font("Helvetica", size=11)
     pdf.set_xy(10, 30)
-    pdf.multi_cell(90, 6, """From:
-Limousine Service Xpress ApS
+    pdf.set_font("Helvetica", style="B", size=11)
+    pdf.multi_cell(90, 6, "From:")
+    pdf.set_font("Helvetica", style="", size=11)
+    pdf.multi_cell(90, 6, """Limousine Service Xpress ApS
 Industriholmen 82
 2650 Hvidovre
 Denmark
@@ -94,7 +96,10 @@ SWIFT: REVOLT21
 Email: limoexpresscph@gmail.com""")
 
     pdf.set_xy(120, 30)
-    to_lines = ["To:", receiver.name]
+    pdf.set_font("Helvetica", style="B", size=11)
+    pdf.cell(0, 6, "To:", ln=True)
+    pdf.set_font("Helvetica", style="", size=11)
+    to_lines = [receiver.name]
     if receiver.contact:
         to_lines.append(f"Att: {receiver.contact}")
     if receiver.address:
@@ -119,8 +124,6 @@ Email: limoexpresscph@gmail.com""")
     pdf.cell(40, 8, "Total", border=1, ln=True)
 
     pdf.set_font("Helvetica", size=11)
-    pdf.set_font_style("")
-    pdf.set_font("Helvetica", style="", size=11)
     pdf.cell(120, 8, description or "Transfers", border=1)
     pdf.cell(30, 8, str(booking_count), border=1)
     pdf.cell(40, 8, f"{total_amount:,.2f} {currency}", border=1, ln=True)
@@ -222,3 +225,4 @@ with tab1:
                 file_name=f"Invoice {invoice_number} for {receiver.name}.pdf",
                 mime="application/pdf"
             )
+
