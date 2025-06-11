@@ -185,7 +185,10 @@ with tab1:
         cleaned_df = cleaned_df[pd.to_numeric(cleaned_df['Base Rate'], errors='coerce').notna()]
         cleaned_df['Base Rate'] = cleaned_df['Base Rate'].astype(float)
         if len(cleaned_df) > 1:
-            cleaned_df = cleaned_df.iloc[:-1]
+            possible_total = cleaned_df.iloc[-1]['Base Rate']
+            calculated_sum = cleaned_df.iloc[:-1]['Base Rate'].sum()
+            if abs(possible_total - calculated_sum) < 1.0:
+                cleaned_df = cleaned_df.iloc[:-1]
         booking_count = len(cleaned_df)
         total_amount = float(cleaned_df['Base Rate'].sum())
 
