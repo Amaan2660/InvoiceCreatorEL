@@ -184,7 +184,7 @@ with tab1:
         cleaned_df = df[target_cols]
         cleaned_df = cleaned_df.dropna(subset=['Base Rate'])
         cleaned_df['Base Rate'] = cleaned_df['Base Rate'].replace(',', '', regex=True).astype(float)
-        if 'Total' in str(cleaned_df.iloc[-1].to_string()):
+        if not pd.to_numeric(cleaned_df['Base Rate'].iloc[-1], errors='coerce').notna():
             cleaned_df = cleaned_df.iloc[:-1]
         booking_count = cleaned_df.shape[0]
         total_amount = cleaned_df['Base Rate'].sum()
