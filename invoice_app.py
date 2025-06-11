@@ -102,7 +102,7 @@ Email: limoexpresscph@gmail.com""")
     pdf.set_font("Helvetica", size=11)
     pdf.cell(120, 8, description or "Transfers", border=1)
     pdf.cell(30, 8, str(booking_count), border=1)
-    pdf.cell(40, 8, f"{float(total_amount):,.2f} {currency}", border=1, ln=True)
+    pdf.cell(40, 8, f"{total_amount:,.2f} {currency}", border=1, ln=True)
 
     pdf.ln(8)
     pdf.set_font("Helvetica", "B", 11)
@@ -182,7 +182,7 @@ with tab1:
         total_amount = st.number_input("Manual Total Amount", min_value=0.0, step=100.0)
         booking_count = st.number_input("Manual Number of Bookings", min_value=0)
 
-    elif uploaded:
+    elif uploaded and st.button("Generate Invoice"):
         df = pd.read_excel(uploaded, header=1)
         target_cols = ['Trip Date', 'Passenger', 'From', 'To', 'Customer', 'Cust. Ref.', 'Base Rate']
         cleaned_df = df[target_cols]
@@ -208,6 +208,9 @@ with tab1:
         st.download_button(
             label="⬇️ Download Specification XLSX",
             data=final_buffer.getvalue(),
+            file_name=f"SERVICE SPECIFICATION FOR INVOICE {invoice_number}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        ),
             file_name=f"SERVICE SPECIFICATION FOR INVOICE {invoice_number}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
