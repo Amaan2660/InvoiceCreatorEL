@@ -178,23 +178,44 @@ with tab1:
     total_amount = 0.0
     booking_count = 0
 
-    if uploaded:
-    buffer = BytesIO()
-    cleaned_df.to_excel(buffer, index=False, engine="openpyxl")
-    buffer.seek(0)
-    wb = load_workbook(buffer)
-    ws = wb.active
-    bold_font = Font(bold=True)
-    for cell in ws[1]:
-        cell.font = bold_font
-    for col in ws.columns:
-        max_length = max(len(str(cell.value)) for cell in col if cell.value)
-        ws.column_dimensions[col[0].column_letter].width = max_length + 2
-    ws.append(["", "", "", "", "", "Total", total_amount])
-    final_buffer = BytesIO()
-    wb.save(final_buffer)
+    if uploaded and mode == "Auto from Excel":
+        df = pd.read_excel(uploaded, header=1)
+        target_cols = ['Trip Date', 'Passenger', 'From', 'To', 'Customer', 'Cust. Ref.', 'Base Rate']
+        cleaned_df = df[target_cols]
+        cleaned_df = cleaned_df.dropna(subset=['Base Rate'])
+        cleaned_df['Base Rate'] = cleaned_df['Base Rate'].replace(',', '', regex=True).astype(float)
+        last_value = cleaned_df['Base Rate'].iloc[-1]
+        sum_except_last = cleaned_df['Base Rate'].iloc[:-1].sum()
+        if abs(last_value - sum_except_last) < 1.0:
+            cleaned_df = cleaned_df.iloc[:-1]
+        booking_count = cleaned_df.shape[0]
+        total_amount = cleaned_df['Base Rate'].sum()
 
-    st.download_button(
+    if mode == "Manual":
+        total_amount = st.number_input("Manual Total Amount", min_value=0.0, step=100.0)
+        booking_count = st.number_input("Manual Number of Bookings", min_value=0)
+
+    if st.button("Generate Invoice"):
+        if not receiver or not invoice_number:
+            st.error("Customer and Invoice Number are required.")
+        else:
+            if uploaded and mode == "Auto from Excel":
+                buffer = BytesIO()
+                cleaned_df.to_excel(buffer, index=False, engine="openpyxl")
+                buffer.seek(0)
+                wb = load_workbook(buffer)
+                ws = wb.active
+                bold_font = Font(bold=True)
+                for cell in ws[1]:
+                    cell.font = bold_font
+                for col in ws.columns:
+                    max_length = max(len(str(cell.value)) for cell in col if cell.value)
+                    ws.column_dimensions[col[0].column_letter].width = max_length + 2
+                ws.append(["", "", "", "", "", "Total", total_amount])
+                final_buffer = BytesIO()
+                wb.save(final_buffer)
+
+                st.download_button(
                     label="⬇️ Download Specification XLSX",
                     data=final_buffer.getvalue(),
                     file_name=f"SERVICE SPECIFICATION FOR INVOICE {invoice_number}.xlsx",
