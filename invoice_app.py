@@ -180,13 +180,15 @@ with tab1:
     cleaned_df = pd.DataFrame()
 
     if uploaded:
-        df = pd.read_excel(uploaded, header=1)
+        raw_df = pd.read_excel(uploaded, header=None)
+        header_row = raw_df.iloc[0].values
+        df = pd.DataFrame(raw_df.values[1:], columns=header_row)
+
         target_cols = ['Trip Date', 'Passenger', 'From', 'To', 'Customer', 'Cust. Ref.', 'Base Rate']
         cleaned_df = df[target_cols].copy()
         cleaned_df['Base Rate'] = pd.to_numeric(cleaned_df['Base Rate'], errors='coerce')
         cleaned_df.dropna(subset=['Base Rate'], inplace=True)
 
-        # New strict logic: drop last row if all fields except 'Base Rate' are NaN
         if len(cleaned_df) > 1:
             last_row = cleaned_df.iloc[-1]
             if all(pd.isna(last_row[col]) for col in cleaned_df.columns if col != 'Base Rate'):
