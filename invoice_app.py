@@ -7,6 +7,7 @@ from io import BytesIO
 import streamlit as st
 from sqlalchemy import create_engine, Column, String, Integer, Boolean
 from sqlalchemy.orm import declarative_base, sessionmaker
+from openpyxl import load_workbook
 
 # ------------------- DATABASE SETUP -------------------
 DB_URL = st.secrets["SUPABASE_DB_URL"]
@@ -173,13 +174,8 @@ with tab1:
         elif not uploaded:
             st.error("Please upload a file.")
         else:
-            # Use row 2 as headers (header=1)
             df = pd.read_excel(uploaded, header=1)
-
-            # Select only these cleaned columns
-            selected_cols = [
-                "Trip Date", "Passenger", "From", "To", "Customer", "Cust. Ref.", "Base Rate"
-            ]
+            selected_cols = ["Trip Date", "Passenger", "From", "To", "Customer", "Cust. Ref.", "Base Rate"]
             cleaned_df = df[selected_cols].copy()
 
             total_amount = manual_total if auto_mode == "Manual" else 0.0
@@ -189,16 +185,28 @@ with tab1:
                 booking_count = len(cleaned_df)
                 total_amount = booking_count * 395
 
-            pdf_bytes = generate_invoice_pdf(receiver, invoice_number, currency, invoice_purpose, total_amount, booking_count)
-
+            # Save to BytesIO
             buffer = BytesIO()
             cleaned_df.to_excel(buffer, index=False, engine="openpyxl")
+            buffer.seek(0)
+            wb = load_workbook(buffer)
+            ws = wb.active
+
+            for col in ws.columns:
+                max_length = max(len(str(cell.value)) if cell.value is not None else 0 for cell in col)
+                ws.column_dimensions[col[0].column_letter].width = max_length + 2
+
+            final_buffer = BytesIO()
+            wb.save(final_buffer)
+
             st.download_button(
                 label="⬇️ Download Specification XLSX",
-                data=buffer.getvalue(),
+                data=final_buffer.getvalue(),
                 file_name=f"SERVICE SPECIFICATION FOR INVOICE {invoice_number}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
+
+            pdf_bytes = generate_invoice_pdf(receiver, invoice_number, currency, invoice_purpose, total_amount, booking_count)
 
             st.download_button(
                 label="⬇️ Download PDF Invoice",
