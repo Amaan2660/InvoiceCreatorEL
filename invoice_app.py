@@ -225,4 +225,3 @@ with tab1:
                 file_name=f"Invoice {invoice_number} for {receiver.name}.pdf",
                 mime="application/pdf"
             )
-
