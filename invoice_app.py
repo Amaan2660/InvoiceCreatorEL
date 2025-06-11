@@ -182,8 +182,12 @@ with tab1:
         df = pd.read_excel(uploaded, header=1)
         target_cols = ['Trip Date', 'Passenger', 'From', 'To', 'Customer', 'Cust. Ref.', 'Base Rate']
         cleaned_df = df[target_cols]
+        cleaned_df = cleaned_df.dropna(subset=['Base Rate'])
         cleaned_df['Base Rate'] = cleaned_df['Base Rate'].replace(',', '', regex=True).astype(float)
-        
+        if 'Total' in str(cleaned_df.iloc[-1].to_string()):
+            cleaned_df = cleaned_df.iloc[:-1]
+        booking_count = cleaned_df.shape[0]
+        total_amount = cleaned_df['Base Rate'].sum()
 
     if mode == "Manual":
         total_amount = st.number_input("Manual Total Amount", min_value=0.0, step=100.0)
