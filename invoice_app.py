@@ -181,9 +181,13 @@ with tab1:
     if uploaded and mode == "Auto from Excel":
         df = pd.read_excel(uploaded, header=1)
         target_cols = ['Trip Date', 'Passenger', 'From', 'To', 'Customer', 'Cust. Ref.', 'Base Rate']
-        cleaned_df = df[target_cols]
+        cleaned_df = df[target_cols].copy()
+        cleaned_df = cleaned_df[pd.to_numeric(cleaned_df['Base Rate'], errors='coerce').notna()]
+        cleaned_df['Base Rate'] = cleaned_df['Base Rate'].astype(float)
+        if len(cleaned_df) > 1:
+            cleaned_df = cleaned_df.iloc[:-1]
         booking_count = len(cleaned_df)
-        total_amount = cleaned_df['Base Rate'].sum()
+        total_amount = float(cleaned_df['Base Rate'].sum())
 
     if mode == "Manual":
         total_amount = st.number_input("Manual Total Amount", min_value=0.0, step=100.0)
