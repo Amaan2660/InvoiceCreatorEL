@@ -119,50 +119,20 @@ Email: limoexpresscph@gmail.com""")
 
     return pdf.output(dest="S").encode("latin-1")
 
+# ------------------- CURRENCY CONVERSION -------------------
+def convert_currency(amount_dkk, target_currency):
+    rates = {
+        "EUR": 7.5,
+        "USD": 6.5,
+        "GBP": 8.8
+    }
+    rate = rates.get(target_currency)
+    return round(amount_dkk / rate, 2) if rate else amount_dkk
+
 # ------------------- STREAMLIT UI -------------------
 st.set_page_config("InvoiceCreatorEL", layout="centered")
 st.title("\U0001F4C4 Invoice Creator EL")
 tab1, tab2 = st.tabs(["\U0001F9FE Create Invoice", "\U0001F465 Manage Customers"])
-
-with tab2:
-    st.subheader("Create New Customer")
-    with st.form("add_customer"):
-        name = st.text_input("Name")
-        is_company = st.radio("Type", ["Company", "Individual"]) == "Company"
-        address = st.text_area("Address")
-        email = st.text_input("Email")
-        contact = st.text_input("Contact Person (optional)")
-        vat = st.text_input("VAT", disabled=not is_company)
-        submitted = st.form_submit_button("Add Customer")
-        if submitted:
-            if not name or not email:
-                st.error("Name and Email are required.")
-            else:
-                add_customer(name=name, address=address, email=email, contact=contact, vat=vat, is_company=is_company)
-                st.success("Customer added.")
-
-    st.subheader("Edit/Delete Customers")
-    for cust in get_customers():
-        with st.expander(cust.name):
-            with st.form(f"edit_{cust.id}"):
-                cname = st.text_input("Name", value=cust.name)
-                ctype = st.radio("Type", ["Company", "Individual"], index=0 if cust.is_company else 1)
-                caddr = st.text_area("Address", value=cust.address)
-                cemail = st.text_input("Email", value=cust.email)
-                ccontact = st.text_input("Contact", value=cust.contact)
-                cvat = st.text_input("VAT", value=cust.vat, disabled=(ctype == "Individual"))
-                update = st.form_submit_button("Update")
-                delete = st.form_submit_button("Delete", type="primary")
-                if update:
-                    update_customer(cust.id, {
-                        "name": cname, "is_company": (ctype == "Company"),
-                        "address": caddr, "email": cemail,
-                        "contact": ccontact, "vat": cvat
-                    })
-                    st.success("Updated.")
-                elif delete:
-                    delete_customer(cust.id)
-                    st.success("Deleted.")
 
 with tab1:
     st.subheader("Create Invoice")
@@ -193,6 +163,8 @@ with tab1:
         if mode == "Auto from Excel":
             booking_count = cleaned_df.shape[0]
             total_amount = cleaned_df['Base Rate'].sum()
+            if currency in ["EUR", "USD", "GBP"]:
+                total_amount = convert_currency(total_amount, currency)
 
     if mode == "Manual":
         total_amount = st.number_input("Manual Total Amount", min_value=0.0, step=100.0)
