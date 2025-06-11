@@ -156,10 +156,10 @@ with tab1:
     currency = st.selectbox("Currency", ["DKK", "EUR", "USD", "GBP"])
     invoice_purpose = st.text_input("Invoice Description (e.g. Transfers in May 2025)")
 
-    auto_mode = st.radio("Invoice Calculation Mode", ["Manual", "Auto from Excel"])
-
     manual_total = 0.0
     manual_bookings = 0
+
+    auto_mode = st.radio("Invoice Calculation Mode", ["Manual", "Auto from Excel"])
 
     if auto_mode == "Manual":
         manual_total = st.number_input("Manual Total Amount", min_value=0.0, step=100.0)
@@ -176,8 +176,8 @@ with tab1:
             df = pd.read_excel(uploaded, header=1)
             cleaned_df = df.dropna(how="all", axis=1)
 
-            total_amount = manual_total
-            booking_count = manual_bookings
+            total_amount = manual_total if auto_mode == "Manual" else 0.0
+            booking_count = manual_bookings if auto_mode == "Manual" else 0
 
             if auto_mode == "Auto from Excel":
                 booking_count = len(cleaned_df)
