@@ -228,35 +228,34 @@ with tab2:
     if not customers:
         st.info("No customers found. Please add one below.")
     else:
+        selected = st.selectbox("Select Customer to Edit/Delete", customers, format_func=lambda c: c.name)
 
-    customers = get_customers()
-            selected = st.selectbox("Select Customer to Edit/Delete", customers, format_func=lambda c: c.name)
+        if selected:
+            with st.expander("Edit Customer"):
+                name = st.text_input("Name", selected.name)
+                email = st.text_input("Email", selected.email)
+                address = st.text_input("Address", selected.address)
+                contact = st.text_input("Contact", selected.contact)
+                vat = st.text_input("VAT Number", selected.vat)
+                is_company = st.checkbox("Is Company", selected.is_company)
 
-            if selected:
-        with st.expander("Edit Customer"):
-            name = st.text_input("Name", selected.name)
-            email = st.text_input("Email", selected.email)
-            address = st.text_input("Address", selected.address)
-            contact = st.text_input("Contact", selected.contact)
-            vat = st.text_input("VAT Number", selected.vat)
-            is_company = st.checkbox("Is Company", selected.is_company)
+                if st.button("Update Customer"):
+                    update_customer(selected.id, {
+                        "name": name,
+                        "email": email,
+                        "address": address,
+                        "contact": contact,
+                        "vat": vat,
+                        "is_company": is_company
+                    })
+                    st.success("Customer updated successfully.")
 
-            if st.button("Update Customer"):
-                update_customer(selected.id, {
-                    "name": name,
-                    "email": email,
-                    "address": address,
-                    "contact": contact,
-                    "vat": vat,
-                    "is_company": is_company
-                })
-                st.success("Customer updated successfully.")
-
-        if st.button("Delete Customer"):
-            delete_customer(selected.id)
-            st.success("Customer deleted successfully.")
+            if st.button("Delete Customer"):
+                delete_customer(selected.id)
+                st.success("Customer deleted successfully.")
 
         st.markdown("---")
+
     with st.expander("Add New Customer"):
         new_name = st.text_input("New Name")
         new_email = st.text_input("New Email")
@@ -278,4 +277,3 @@ with tab2:
                 st.success("Customer added successfully.")
             else:
                 st.warning("Name is required.")
-
