@@ -276,3 +276,4 @@ with tab2:
                 )
                 st.success("Customer added successfully.")
             else:
+                st.warning("Name is required.")
