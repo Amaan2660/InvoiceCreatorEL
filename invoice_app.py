@@ -49,6 +49,24 @@ def delete_customer(id):
         session.query(Customer).filter(Customer.id == id).delete()
         session.commit()
 
+# ------------------- CURRENCY CONVERSION -------------------
+def convert_currency(amount_dkk, target_currency):
+    rates = {
+        "EUR": 7.5,
+        "USD": 6.5,
+        "GBP": 8.8
+    }
+    rate = rates.get(target_currency)
+    return round(amount_dkk / rate, 2) if rate else amount_dkk
+
+def get_currency_note(currency):
+    rates = {
+        "EUR": 7.5,
+        "USD": 6.5,
+        "GBP": 8.8
+    }
+    return f"{currency} ({rates[currency]} DKK)" if currency in rates else currency
+
 # ------------------- PDF GENERATION -------------------
 def generate_invoice_pdf(receiver, invoice_number, currency, description, total_amount, booking_count, due_date):
     pdf = FPDF()
@@ -65,8 +83,10 @@ def generate_invoice_pdf(receiver, invoice_number, currency, description, total_
 
     pdf.set_font("Helvetica", size=11)
     pdf.set_xy(10, 30)
-    pdf.multi_cell(90, 6, """From:
-Limousine Service Xpress ApS
+    pdf.set_font("Helvetica", style="B", size=11)
+    pdf.multi_cell(90, 6, "From:")
+    pdf.set_font("Helvetica", style="", size=11)
+    pdf.multi_cell(90, 6, """Limousine Service Xpress ApS
 Industriholmen 82
 2650 Hvidovre
 Denmark
@@ -76,7 +96,10 @@ SWIFT: REVOLT21
 Email: limoexpresscph@gmail.com""")
 
     pdf.set_xy(120, 30)
-    to_lines = ["To:", receiver.name]
+    pdf.set_font("Helvetica", style="B", size=11)
+    pdf.cell(0, 6, "To:", ln=True)
+    pdf.set_font("Helvetica", style="", size=11)
+    to_lines = [receiver.name]
     if receiver.contact:
         to_lines.append(f"Att: {receiver.contact}")
     if receiver.address:
@@ -89,9 +112,10 @@ Email: limoexpresscph@gmail.com""")
     pdf.set_xy(10, 100)
     today = datetime.date.today().strftime("%d/%m/%Y")
     due_date_fmt = due_date.strftime("%d/%m/%Y")
+    currency_note = get_currency_note(currency)
     pdf.cell(0, 6, f"Invoice Date: {today}", ln=True)
     pdf.cell(0, 6, f"Due Date: {due_date_fmt}", ln=True)
-    pdf.cell(0, 6, f"Currency: {currency}", ln=True)
+    pdf.cell(0, 6, f"Currency: {currency_note}", ln=True)
     pdf.ln(10)
 
     pdf.set_font("Helvetica", "B", 12)
@@ -124,46 +148,6 @@ st.set_page_config("InvoiceCreatorEL", layout="centered")
 st.title("\U0001F4C4 Invoice Creator EL")
 tab1, tab2 = st.tabs(["\U0001F9FE Create Invoice", "\U0001F465 Manage Customers"])
 
-with tab2:
-    st.subheader("Create New Customer")
-    with st.form("add_customer"):
-        name = st.text_input("Name")
-        is_company = st.radio("Type", ["Company", "Individual"]) == "Company"
-        address = st.text_area("Address")
-        email = st.text_input("Email")
-        contact = st.text_input("Contact Person (optional)")
-        vat = st.text_input("VAT", disabled=not is_company)
-        submitted = st.form_submit_button("Add Customer")
-        if submitted:
-            if not name or not email:
-                st.error("Name and Email are required.")
-            else:
-                add_customer(name=name, address=address, email=email, contact=contact, vat=vat, is_company=is_company)
-                st.success("Customer added.")
-
-    st.subheader("Edit/Delete Customers")
-    for cust in get_customers():
-        with st.expander(cust.name):
-            with st.form(f"edit_{cust.id}"):
-                cname = st.text_input("Name", value=cust.name)
-                ctype = st.radio("Type", ["Company", "Individual"], index=0 if cust.is_company else 1)
-                caddr = st.text_area("Address", value=cust.address)
-                cemail = st.text_input("Email", value=cust.email)
-                ccontact = st.text_input("Contact", value=cust.contact)
-                cvat = st.text_input("VAT", value=cust.vat, disabled=(ctype == "Individual"))
-                update = st.form_submit_button("Update")
-                delete = st.form_submit_button("Delete", type="primary")
-                if update:
-                    update_customer(cust.id, {
-                        "name": cname, "is_company": (ctype == "Company"),
-                        "address": caddr, "email": cemail,
-                        "contact": ccontact, "vat": cvat
-                    })
-                    st.success("Updated.")
-                elif delete:
-                    delete_customer(cust.id)
-                    st.success("Deleted.")
-
 with tab1:
     st.subheader("Create Invoice")
     customers = get_customers()
@@ -175,7 +159,7 @@ with tab1:
     mode = st.radio("Select Amount Mode", ["Manual", "Auto from Excel"])
 
     uploaded = st.file_uploader("Upload Excel File", type=["xlsx"])
-    total_amount = 0.0
+    total_amount_dkk = 0.0
     booking_count = 0
     cleaned_df = pd.DataFrame()
 
@@ -192,11 +176,15 @@ with tab1:
 
         if mode == "Auto from Excel":
             booking_count = cleaned_df.shape[0]
-            total_amount = cleaned_df['Base Rate'].sum()
+            total_amount_dkk = cleaned_df['Base Rate'].sum()
 
     if mode == "Manual":
-        total_amount = st.number_input("Manual Total Amount", min_value=0.0, step=100.0)
+        total_amount_dkk = st.number_input("Manual Total Amount", min_value=0.0, step=100.0)
         booking_count = st.number_input("Manual Number of Bookings", min_value=0)
+
+    if mode == "Auto from Excel" and currency in ["EUR", "USD", "GBP"]:
+        converted = convert_currency(total_amount_dkk, currency)
+        st.markdown(f"**Converted Amount (for PDF):** {converted:,.2f} {currency}")
 
     if st.button("Generate Invoice"):
         if not receiver or not invoice_number:
@@ -225,9 +213,11 @@ with tab1:
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
 
+            final_total = convert_currency(total_amount_dkk, currency) if mode == "Auto from Excel" and currency in ["EUR", "USD", "GBP"] else total_amount_dkk
+
             pdf_bytes = generate_invoice_pdf(
                 receiver, invoice_number, currency, invoice_purpose,
-                total_amount, booking_count, due_date
+                final_total, booking_count, due_date
             )
             st.download_button(
                 label="⬇️ Download PDF Invoice",
