@@ -100,18 +100,22 @@ Email: limoexpresscph@gmail.com""")
     pdf.set_font("Helvetica", style="B", size=11)
     pdf.cell(0, 6, "To:", ln=True)
     pdf.set_font("Helvetica", style="", size=11)
-    y_start = pdf.get_y()
-    to_lines = [
-        receiver.name,
-        receiver.address,
-        f"Att: {receiver.contact}" if receiver.contact else None,
-        f"VAT No: {receiver.vat}" if receiver.vat and receiver.is_company else None,
-        f"Email: {receiver.email}"
-    ]
-    to_lines = [line for line in to_lines if line]
-    pdf.set_xy(120, y_start)
-    for line in to_lines:
-        pdf.cell(0, 6, line, ln=True)
+
+    pdf.set_x(120)
+    if receiver.name:
+        pdf.cell(0, 6, receiver.name, ln=True)
+    if receiver.contact:
+        pdf.set_x(120)
+        pdf.cell(0, 6, f"Att: {receiver.contact}", ln=True)
+    if receiver.address:
+        pdf.set_x(120)
+        pdf.cell(0, 6, receiver.address, ln=True)
+    if receiver.vat and receiver.is_company:
+        pdf.set_x(120)
+        pdf.cell(0, 6, f"VAT No: {receiver.vat}", ln=True)
+    if receiver.email:
+        pdf.set_x(120)
+        pdf.cell(0, 6, f"Email: {receiver.email}", ln=True)
 
     
 
