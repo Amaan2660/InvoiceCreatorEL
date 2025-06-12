@@ -101,14 +101,14 @@ Email: limoexpresscph@gmail.com""")
     pdf.cell(0, 6, "To:", ln=True)
     pdf.set_font("Helvetica", style="", size=11)
     y_start = pdf.get_y()
-    to_lines = [receiver.name]
-    if receiver.contact:
-        to_lines.append(f"Att: {receiver.contact}")
-    if receiver.address:
-        to_lines.append(receiver.address)
-    if receiver.vat and receiver.is_company:
-        to_lines.append(f"VAT No: {receiver.vat}")
-    to_lines.append(f"Email: {receiver.email}")
+    to_lines = [
+        receiver.name,
+        f"Att: {receiver.contact}" if receiver.contact else None,
+        receiver.address,
+        f"VAT No: {receiver.vat}" if receiver.vat and receiver.is_company else None,
+        f"Email: {receiver.email}"
+    ]
+    to_lines = [line for line in to_lines if line]
     pdf.set_xy(120, y_start)
     for line in to_lines:
         pdf.cell(0, 6, line, ln=True)
@@ -276,4 +276,3 @@ with tab2:
                 )
                 st.success("Customer added successfully.")
             else:
-                st.warning("Name is required.")
