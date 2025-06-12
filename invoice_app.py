@@ -2,6 +2,7 @@
 
 import datetime
 import pandas as pd
+import base64
 from fpdf import FPDF
 from io import BytesIO
 import streamlit as st
@@ -99,6 +100,7 @@ Email: limoexpresscph@gmail.com""")
     pdf.set_font("Helvetica", style="B", size=11)
     pdf.cell(0, 6, "To:", ln=True)
     pdf.set_font("Helvetica", style="", size=11)
+    y_start = pdf.get_y()
     to_lines = [receiver.name]
     if receiver.contact:
         to_lines.append(f"Att: {receiver.contact}")
@@ -107,7 +109,9 @@ Email: limoexpresscph@gmail.com""")
     if receiver.vat and receiver.is_company:
         to_lines.append(f"VAT No: {receiver.vat}")
     to_lines.append(f"Email: {receiver.email}")
-    pdf.multi_cell(0, 6, "\n".join(to_lines))
+    pdf.set_xy(120, y_start)
+    for line in to_lines:
+        pdf.cell(0, 6, line, ln=True)
 
     pdf.set_xy(10, 100)
     today = datetime.date.today().strftime("%d/%m/%Y")
@@ -143,6 +147,14 @@ Email: limoexpresscph@gmail.com""")
 
     return pdf.output(dest="S").encode("latin-1")
 
+# ------------------- PREVIEW HELPERS -------------------
+def preview_pdf(bytes_pdf):
+    b64 = base64.b64encode(bytes_pdf).decode()
+    return f"""<iframe src='data:application/pdf;base64,{b64}' width='700' height='900' type='application/pdf'></iframe>"""
+
+def preview_excel(df):
+    return st.dataframe(df)
+
 # ------------------- STREAMLIT UI -------------------
 st.set_page_config("InvoiceCreatorEL", layout="centered")
 st.title("\U0001F4C4 Invoice Creator EL")
@@ -165,8 +177,7 @@ with tab1:
 
     if uploaded:
         df = pd.read_excel(uploaded, header=1)
-        target_cols = ['Trip Date', 'Passenger', '**From**', '**To**', 'Customer', 'Cust. Ref.', 'Base Rate']
-        df.rename(columns={'From': '**From**', 'To': '**To**'}, inplace=True)
+        target_cols = ['Trip Date', 'Passenger', 'From', 'To', 'Customer', 'Cust. Ref.', 'Base Rate']
         cleaned_df = df[target_cols]
         cleaned_df = cleaned_df.dropna(subset=['Base Rate'])
         cleaned_df['Base Rate'] = cleaned_df['Base Rate'].replace(',', '', regex=True).astype(float)
@@ -202,23 +213,63 @@ with tab1:
                 ws.append(["", "", "", "", "", "Total", cleaned_df['Base Rate'].sum()])
                 final_buffer = BytesIO()
                 wb.save(final_buffer)
+                preview_excel(cleaned_df)
+                st.download_button("⬇️ Download Specification XLSX", data=final_buffer.getvalue(), file_name=f"SERVICE SPECIFICATION FOR INVOICE {invoice_number}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
-                st.download_button(
-                    label="⬇️ Download Specification XLSX",
-                    data=final_buffer.getvalue(),
-                    file_name=f"SERVICE SPECIFICATION FOR INVOICE {invoice_number}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            final_total = convert_currency(total_amount_dkk, currency) if mode == "Auto from Excel" and currency != "DKK" else total_amount_dkk
+            pdf_bytes = generate_invoice_pdf(receiver, invoice_number, currency, invoice_purpose, final_total, booking_count, due_date)
+            st.markdown(preview_pdf(pdf_bytes), unsafe_allow_html=True)
+            st.download_button("⬇️ Download PDF Invoice", data=pdf_bytes, file_name=f"Invoice {invoice_number} for {receiver.name}.pdf", mime="application/pdf")
+
+with tab2:
+    st.subheader("Manage Customers")
+
+    customers = get_customers()
+    selected = st.selectbox("Select Customer to Edit/Delete", customers, format_func=lambda c: c.name if c else "")
+
+    if selected:
+        with st.expander("Edit Customer"):
+            name = st.text_input("Name", selected.name)
+            email = st.text_input("Email", selected.email)
+            address = st.text_input("Address", selected.address)
+            contact = st.text_input("Contact", selected.contact)
+            vat = st.text_input("VAT Number", selected.vat)
+            is_company = st.checkbox("Is Company", selected.is_company)
+
+            if st.button("Update Customer"):
+                update_customer(selected.id, {
+                    "name": name,
+                    "email": email,
+                    "address": address,
+                    "contact": contact,
+                    "vat": vat,
+                    "is_company": is_company
+                })
+                st.success("Customer updated successfully.")
+
+        if st.button("Delete Customer"):
+            delete_customer(selected.id)
+            st.success("Customer deleted successfully.")
+
+    st.markdown("---")
+    with st.expander("Add New Customer"):
+        new_name = st.text_input("New Name")
+        new_email = st.text_input("New Email")
+        new_address = st.text_input("New Address")
+        new_contact = st.text_input("New Contact")
+        new_vat = st.text_input("New VAT Number")
+        new_is_company = st.checkbox("New Is Company", value=True)
+
+        if st.button("Add Customer"):
+            if new_name:
+                add_customer(
+                    name=new_name,
+                    email=new_email,
+                    address=new_address,
+                    contact=new_contact,
+                    vat=new_vat,
+                    is_company=new_is_company
                 )
-
-            final_total = convert_currency(total_amount_dkk, currency) if mode == "Auto from Excel" and currency in ["EUR", "USD", "GBP"] else total_amount_dkk
-
-            pdf_bytes = generate_invoice_pdf(
-                receiver, invoice_number, currency, invoice_purpose,
-                final_total, booking_count, due_date
-            )
-            st.download_button(
-                label="⬇️ Download PDF Invoice",
-                data=pdf_bytes,
-                file_name=f"Invoice {invoice_number} for {receiver.name}.pdf",
-                mime="application/pdf"
-            )
+                st.success("Customer added successfully.")
+            else:
+                st.warning("Name is required.")
