@@ -106,16 +106,16 @@ Email: limoexpresscph@gmail.com""")
         pdf.cell(0, 6, receiver.name, ln=True)
     if receiver.contact:
         pdf.set_x(120)
-        pdf.cell(0, 6, f"Att: {receiver.contact}", ln=True)
+        pdf.multi_cell(80, 6, f"Att: {receiver.contact}")
     if receiver.address:
         pdf.set_x(120)
-        pdf.cell(0, 6, receiver.address, ln=True)
+        pdf.multi_cell(80, 6, receiver.address)
     if receiver.vat and receiver.is_company:
         pdf.set_x(120)
         pdf.cell(0, 6, f"VAT No: {receiver.vat}", ln=True)
     if receiver.email:
         pdf.set_x(120)
-        pdf.cell(0, 6, f"Email: {receiver.email}", ln=True)
+        pdf.multi_cell(80, 6, f"Email: {receiver.email}")
 
     
 
