@@ -65,7 +65,7 @@ def get_currency_note(currency):
         "USD": 6.5,
         "GBP": 8.8
     }
-    return f"{currency} ({rates[currency]} DKK)" if currency in rates else currency
+    return f"{currency} (1 {currency} = {rates[currency]} DKK)" if currency in rates else currency
 
 # ------------------- PDF GENERATION -------------------
 def generate_invoice_pdf(receiver, invoice_number, currency, description, total_amount, booking_count, due_date):
@@ -165,7 +165,8 @@ with tab1:
 
     if uploaded:
         df = pd.read_excel(uploaded, header=1)
-        target_cols = ['Trip Date', 'Passenger', 'From', 'To', 'Customer', 'Cust. Ref.', 'Base Rate']
+        target_cols = ['Trip Date', 'Passenger', '**From**', '**To**', 'Customer', 'Cust. Ref.', 'Base Rate']
+        df.rename(columns={'From': '**From**', 'To': '**To**'}, inplace=True)
         cleaned_df = df[target_cols]
         cleaned_df = cleaned_df.dropna(subset=['Base Rate'])
         cleaned_df['Base Rate'] = cleaned_df['Base Rate'].replace(',', '', regex=True).astype(float)
@@ -181,10 +182,6 @@ with tab1:
     if mode == "Manual":
         total_amount_dkk = st.number_input("Manual Total Amount", min_value=0.0, step=100.0)
         booking_count = st.number_input("Manual Number of Bookings", min_value=0)
-
-    if mode == "Auto from Excel" and currency in ["EUR", "USD", "GBP"]:
-        converted = convert_currency(total_amount_dkk, currency)
-        st.markdown(f"**Converted Amount (for PDF):** {converted:,.2f} {currency}")
 
     if st.button("Generate Invoice"):
         if not receiver or not invoice_number:
