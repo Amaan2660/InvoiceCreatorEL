@@ -225,9 +225,14 @@ with tab2:
     st.subheader("Manage Customers")
 
     customers = get_customers()
-    selected = st.selectbox("Select Customer to Edit/Delete", customers, format_func=lambda c: c.name if c else "")
+    if not customers:
+        st.info("No customers found. Please add one below.")
+    else:
 
-    if selected:
+    customers = get_customers()
+            selected = st.selectbox("Select Customer to Edit/Delete", customers, format_func=lambda c: c.name)
+
+            if selected:
         with st.expander("Edit Customer"):
             name = st.text_input("Name", selected.name)
             email = st.text_input("Email", selected.email)
@@ -251,7 +256,7 @@ with tab2:
             delete_customer(selected.id)
             st.success("Customer deleted successfully.")
 
-    st.markdown("---")
+        st.markdown("---")
     with st.expander("Add New Customer"):
         new_name = st.text_input("New Name")
         new_email = st.text_input("New Email")
@@ -273,3 +278,4 @@ with tab2:
                 st.success("Customer added successfully.")
             else:
                 st.warning("Name is required.")
+
