@@ -176,13 +176,16 @@ with tab1:
     due_date = st.date_input("Due Date")
     mode = st.radio("Select Amount Mode", ["Manual", "Auto from Excel"])
 
-    uploaded = st.file_uploader("Upload Excel File", type=["xlsx"])
+    uploaded = st.file_uploader("Upload Excel File", type=["xls", "xlsx"])
     total_amount_dkk = 0.0
     booking_count = 0
     cleaned_df = pd.DataFrame()
 
     if uploaded:
-        df = pd.read_excel(uploaded, header=1)
+        if uploaded.name.endswith(".xls"):
+            df = pd.read_excel(uploaded, header=1, engine="xlrd")
+        else:
+            df = pd.read_excel(uploaded, header=1, engine="openpyxl")
         target_cols = ['Trip Date', 'Passenger', 'From', 'To', 'Customer', 'Cust. Ref.', 'Base Rate']
         cleaned_df = df[target_cols]
         cleaned_df = cleaned_df.dropna(subset=['Base Rate'])
