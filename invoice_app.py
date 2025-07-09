@@ -91,7 +91,7 @@ def generate_invoice_pdf(receiver, invoice_number, currency, description, total_
 Industriholmen 82
 2650 Hvidovre
 Denmark
-CVR: DK45247961
+CVR/VAT: DK45247961
 IBAN: LT87 3250 0345 4552 5735
 SWIFT: REVOLT21
 Email: limoexpresscph@gmail.com""")
