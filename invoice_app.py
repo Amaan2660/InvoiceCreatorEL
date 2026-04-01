@@ -40,10 +40,11 @@ def get_customers():
 
 def update_customer(id, updates):
     with SessionLocal() as session:
-        cust = session.query(Customer).get(id)
-        for k, v in updates.items():
-            setattr(cust, k, v)
-        session.commit()
+        cust = session.get(Customer, id)
+        if cust:
+            for k, v in updates.items():
+                setattr(cust, k, v)
+            session.commit()
 
 def delete_customer(id):
     with SessionLocal() as session:
@@ -78,14 +79,13 @@ def get_bank_details(bank_choice):
             "reg_no": "2355",
             "account_no": "9046331785"
         }
-    else:
-        return {
-            "bank_name": "Revolut",
-            "iban": "LT87 3250 0345 4552 5735",
-            "swift": "REVOLT21",
-            "reg_no": "",
-            "account_no": ""
-        }
+    return {
+        "bank_name": "Revolut",
+        "iban": "LT87 3250 0345 4552 5735",
+        "swift": "REVOLT21",
+        "reg_no": "",
+        "account_no": ""
+    }
 
 # ------------------- PDF GENERATION -------------------
 def generate_invoice_pdf(receiver, invoice_number, currency, description, total_amount, booking_count, due_date, bank_choice):
@@ -95,18 +95,19 @@ def generate_invoice_pdf(receiver, invoice_number, currency, description, total_
 
     try:
         pdf.image("logo.png", x=10, y=8, w=40)
-    except RuntimeError:
+    except Exception:
         pass
 
     pdf.set_font("Helvetica", "B", 20)
     pdf.set_xy(150, 10)
     pdf.cell(0, 10, f"INVOICE {invoice_number}", ln=True)
 
+    # From block
     pdf.set_font("Helvetica", size=11)
     pdf.set_xy(10, 30)
-    pdf.set_font("Helvetica", style="B", size=11)
+    pdf.set_font("Helvetica", "B", 11)
     pdf.multi_cell(90, 6, "From:")
-    pdf.set_font("Helvetica", style="", size=11)
+    pdf.set_font("Helvetica", "", 11)
 
     sender_text = f"""Limousine Service Xpress ApS
 Industriholmen 82
@@ -126,10 +127,11 @@ Email: limoexpresscph@gmail.com"""
 
     pdf.multi_cell(90, 6, sender_text)
 
+    # To block
     pdf.set_xy(120, 30)
-    pdf.set_font("Helvetica", style="B", size=11)
+    pdf.set_font("Helvetica", "B", 11)
     pdf.cell(0, 6, "To:", ln=True)
-    pdf.set_font("Helvetica", style="", size=11)
+    pdf.set_font("Helvetica", "", 11)
 
     pdf.set_x(120)
     if receiver.name:
@@ -147,16 +149,8 @@ Email: limoexpresscph@gmail.com"""
         pdf.set_x(120)
         pdf.multi_cell(80, 6, f"Email: {receiver.email}")
 
-    if bank_choice == "Nordea":
-        y_after_receiver = max(pdf.get_y(), 78)
-        pdf.set_xy(10, y_after_receiver + 6)
-        pdf.set_font("Helvetica", "B", 15)
-        pdf.cell(0, 10, "IMPORTANT: PLEASE USE OUR NEW BANK DETAILS", ln=True)
-
-        pdf.set_font("Helvetica", "", 11)
-        pdf.multi_cell(0, 7, "Please make payment using the Nordea banking information stated on this invoice.")
-
-    pdf.set_xy(10, max(pdf.get_y() + 8, 100))
+    # Invoice details
+    pdf.set_xy(10, 100)
     today = datetime.date.today().strftime("%d/%m/%Y")
     due_date_fmt = due_date.strftime("%d/%m/%Y")
     currency_note = get_currency_note(currency)
@@ -165,12 +159,13 @@ Email: limoexpresscph@gmail.com"""
     pdf.cell(0, 6, f"Currency: {currency_note}", ln=True)
     pdf.ln(10)
 
+    # Invoice table
     pdf.set_font("Helvetica", "B", 12)
     pdf.cell(120, 8, "Description", border=1)
     pdf.cell(30, 8, "Qty", border=1)
     pdf.cell(40, 8, "Total", border=1, ln=True)
 
-    pdf.set_font("Helvetica", size=11)
+    pdf.set_font("Helvetica", "", 11)
     pdf.cell(120, 8, description or "Transfers", border=1)
     pdf.cell(30, 8, str(booking_count), border=1)
     pdf.cell(40, 8, f"{total_amount:,.2f} {currency}", border=1, ln=True)
@@ -185,23 +180,38 @@ Email: limoexpresscph@gmail.com"""
     pdf.cell(40, 8, f"{total_amount:,.2f} {currency}", ln=True)
 
     pdf.ln(10)
-    pdf.set_font("Helvetica", style="I", size=10)
+    pdf.set_font("Helvetica", "I", 10)
     pdf.cell(0, 6, f"Please add invoice number {invoice_number} as reference when making payment.", ln=True)
+
+    # Bottom notice for Nordea only
+    if bank_choice == "Nordea":
+        pdf.set_y(-34)
+        pdf.set_font("Helvetica", "B", 13)
+        pdf.cell(190, 8, "IMPORTANT: PLEASE USE OUR NEW BANK DETAILS", border=1, ln=True, align="C")
+
+        pdf.set_font("Helvetica", "", 10)
+        pdf.multi_cell(
+            190,
+            6,
+            "Please make payment using the Nordea banking information stated on this invoice.",
+            border=1,
+            align="C"
+        )
 
     return pdf.output(dest="S").encode("latin-1")
 
 # ------------------- PREVIEW HELPERS -------------------
 def preview_pdf(bytes_pdf):
     b64 = base64.b64encode(bytes_pdf).decode()
-    return f"""<iframe src='data:application/pdf;base64,{b64}' width='700' height='900' type='application/pdf'></iframe>"""
+    return f"<iframe src='data:application/pdf;base64,{b64}' width='700' height='900' type='application/pdf'></iframe>"
 
 def preview_excel(df):
     return st.dataframe(df)
 
 # ------------------- STREAMLIT UI -------------------
-st.set_page_config("InvoiceCreatorEL", layout="centered")
-st.title("\U0001F4C4 Invoice Creator EL")
-tab1, tab2 = st.tabs(["\U0001F9FE Create Invoice", "\U0001F465 Manage Customers"])
+st.set_page_config(page_title="InvoiceCreatorEL", layout="centered")
+st.title("📄 Invoice Creator EL")
+tab1, tab2 = st.tabs(["🧾 Create Invoice", "👥 Manage Customers"])
 
 with tab1:
     st.subheader("Create Invoice")
@@ -220,22 +230,35 @@ with tab1:
     cleaned_df = pd.DataFrame()
 
     if uploaded:
-        if uploaded.name.endswith(".xls"):
-            df = pd.read_excel(uploaded, header=1, engine="xlrd")
-        else:
-            df = pd.read_excel(uploaded, header=1, engine="openpyxl")
-        target_cols = ['Trip Date', 'Passenger', 'From', 'To', 'Customer', 'Cust. Ref.', 'Base Rate']
-        cleaned_df = df[target_cols]
-        cleaned_df = cleaned_df.dropna(subset=['Base Rate'])
-        cleaned_df['Base Rate'] = cleaned_df['Base Rate'].replace(',', '', regex=True).astype(float)
-        last_value = cleaned_df['Base Rate'].iloc[-1]
-        sum_except_last = cleaned_df['Base Rate'].iloc[:-1].sum()
-        if abs(last_value - sum_except_last) < 1.0:
-            cleaned_df = cleaned_df.iloc[:-1]
+        try:
+            if uploaded.name.endswith(".xls"):
+                df = pd.read_excel(uploaded, header=1, engine="xlrd")
+            else:
+                df = pd.read_excel(uploaded, header=1, engine="openpyxl")
 
-        if mode == "Auto from Excel":
-            booking_count = cleaned_df.shape[0]
-            total_amount_dkk = cleaned_df['Base Rate'].sum()
+            target_cols = ['Trip Date', 'Passenger', 'From', 'To', 'Customer', 'Cust. Ref.', 'Base Rate']
+            missing_cols = [col for col in target_cols if col not in df.columns]
+
+            if missing_cols:
+                st.error(f"Missing required columns in Excel file: {', '.join(missing_cols)}")
+            else:
+                cleaned_df = df[target_cols].copy()
+                cleaned_df = cleaned_df.dropna(subset=['Base Rate'])
+                cleaned_df['Base Rate'] = cleaned_df['Base Rate'].astype(str).str.replace(',', '', regex=False)
+                cleaned_df['Base Rate'] = pd.to_numeric(cleaned_df['Base Rate'], errors='coerce')
+                cleaned_df = cleaned_df.dropna(subset=['Base Rate'])
+
+                if not cleaned_df.empty:
+                    last_value = cleaned_df['Base Rate'].iloc[-1]
+                    sum_except_last = cleaned_df['Base Rate'].iloc[:-1].sum()
+                    if len(cleaned_df) > 1 and abs(last_value - sum_except_last) < 1.0:
+                        cleaned_df = cleaned_df.iloc[:-1]
+
+                if mode == "Auto from Excel":
+                    booking_count = cleaned_df.shape[0]
+                    total_amount_dkk = cleaned_df['Base Rate'].sum()
+        except Exception as e:
+            st.error(f"Could not read Excel file: {e}")
 
     if mode == "Manual":
         total_amount_dkk = st.number_input("Manual Total Amount", min_value=0.0, step=100.0)
@@ -249,17 +272,24 @@ with tab1:
                 buffer = BytesIO()
                 cleaned_df.to_excel(buffer, index=False, engine="openpyxl")
                 buffer.seek(0)
+
                 wb = load_workbook(buffer)
                 ws = wb.active
                 bold_font = Font(bold=True)
+
                 for cell in ws[1]:
                     cell.font = bold_font
+
                 for col in ws.columns:
-                    max_length = max(len(str(cell.value)) for cell in col if cell.value)
+                    values = [len(str(cell.value)) for cell in col if cell.value is not None]
+                    max_length = max(values) if values else 10
                     ws.column_dimensions[col[0].column_letter].width = max_length + 2
+
                 ws.append(["", "", "", "", "", "Total", cleaned_df['Base Rate'].sum()])
+
                 final_buffer = BytesIO()
                 wb.save(final_buffer)
+
                 preview_excel(cleaned_df)
                 st.download_button(
                     "⬇️ Download Specification XLSX",
@@ -269,16 +299,18 @@ with tab1:
                 )
 
             final_total = convert_currency(total_amount_dkk, currency) if mode == "Auto from Excel" and currency != "DKK" else total_amount_dkk
+
             pdf_bytes = generate_invoice_pdf(
-                receiver,
-                invoice_number,
-                currency,
-                invoice_purpose,
-                final_total,
-                booking_count,
-                due_date,
-                bank_choice
+                receiver=receiver,
+                invoice_number=invoice_number,
+                currency=currency,
+                description=invoice_purpose,
+                total_amount=final_total,
+                booking_count=booking_count,
+                due_date=due_date,
+                bank_choice=bank_choice
             )
+
             st.markdown(preview_pdf(pdf_bytes), unsafe_allow_html=True)
             st.download_button(
                 "⬇️ Download PDF Invoice",
