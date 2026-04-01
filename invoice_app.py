@@ -118,8 +118,8 @@ SWIFT: {bank_details['swift']}"""
 
     if bank_details["reg_no"]:
         sender_text += f"""
-Reg No: {bank_details['reg_no']}
-Account No: {bank_details['account_no']}"""
+Reg Nr: {bank_details['reg_no']}
+Konto Nr: {bank_details['account_no']}"""
 
     sender_text += """
 Email: limoexpresscph@gmail.com"""
@@ -151,7 +151,7 @@ Email: limoexpresscph@gmail.com"""
         y_after_receiver = max(pdf.get_y(), 78)
         pdf.set_xy(10, y_after_receiver + 6)
         pdf.set_font("Helvetica", "B", 15)
-        pdf.cell(0, 10, "IMPORTANT: PLEASE USE OUR NEW NORDEA BANK DETAILS", ln=True)
+        pdf.cell(0, 10, "IMPORTANT: PLEASE USE OUR NEW BANK DETAILS", ln=True)
 
         pdf.set_font("Helvetica", "", 11)
         pdf.multi_cell(0, 7, "Please make payment using the Nordea banking information stated on this invoice.")
