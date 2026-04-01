@@ -185,7 +185,7 @@ Email: limoexpresscph@gmail.com"""
 
     # Bottom notice for Nordea only
     if bank_choice == "Nordea":
-        pdf.set_y(-10)
+        pdf.set_y(-50)
         pdf.set_font("Helvetica", "B", 13)
         pdf.cell(190, 8, "IMPORTANT: PLEASE USE OUR NEW BANK DETAILS", border=1, ln=True, align="C")
 
