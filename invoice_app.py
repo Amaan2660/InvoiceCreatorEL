@@ -68,10 +68,30 @@ def get_currency_note(currency):
     }
     return f"{currency} (1 {currency} = {rates[currency]} DKK)" if currency in rates else currency
 
+# ------------------- BANK DETAILS -------------------
+def get_bank_details(bank_choice):
+    if bank_choice == "Nordea":
+        return {
+            "bank_name": "Nordea",
+            "iban": "DK41 2000 9046 3317 85",
+            "swift": "NDEADKKK",
+            "reg_no": "2355",
+            "account_no": "9046331785"
+        }
+    else:
+        return {
+            "bank_name": "Revolut",
+            "iban": "LT87 3250 0345 4552 5735",
+            "swift": "REVOLT21",
+            "reg_no": "",
+            "account_no": ""
+        }
+
 # ------------------- PDF GENERATION -------------------
-def generate_invoice_pdf(receiver, invoice_number, currency, description, total_amount, booking_count, due_date):
+def generate_invoice_pdf(receiver, invoice_number, currency, description, total_amount, booking_count, due_date, bank_choice):
     pdf = FPDF()
     pdf.add_page()
+    bank_details = get_bank_details(bank_choice)
 
     try:
         pdf.image("logo.png", x=10, y=8, w=40)
@@ -87,14 +107,24 @@ def generate_invoice_pdf(receiver, invoice_number, currency, description, total_
     pdf.set_font("Helvetica", style="B", size=11)
     pdf.multi_cell(90, 6, "From:")
     pdf.set_font("Helvetica", style="", size=11)
-    pdf.multi_cell(90, 6, """Limousine Service Xpress ApS
+
+    sender_text = f"""Limousine Service Xpress ApS
 Industriholmen 82
 2650 Hvidovre
 Denmark
 CVR/VAT: DK45247961
-IBAN: LT87 3250 0345 4552 5735
-SWIFT: REVOLT21
-Email: limoexpresscph@gmail.com""")
+IBAN: {bank_details['iban']}
+SWIFT: {bank_details['swift']}"""
+
+    if bank_details["reg_no"]:
+        sender_text += f"""
+Reg No: {bank_details['reg_no']}
+Account No: {bank_details['account_no']}"""
+
+    sender_text += """
+Email: limoexpresscph@gmail.com"""
+
+    pdf.multi_cell(90, 6, sender_text)
 
     pdf.set_xy(120, 30)
     pdf.set_font("Helvetica", style="B", size=11)
@@ -117,9 +147,16 @@ Email: limoexpresscph@gmail.com""")
         pdf.set_x(120)
         pdf.multi_cell(80, 6, f"Email: {receiver.email}")
 
-    
+    if bank_choice == "Nordea":
+        y_after_receiver = max(pdf.get_y(), 78)
+        pdf.set_xy(10, y_after_receiver + 6)
+        pdf.set_font("Helvetica", "B", 15)
+        pdf.cell(0, 10, "IMPORTANT: PLEASE USE OUR NEW NORDEA BANK DETAILS", ln=True)
 
-    pdf.set_xy(10, 100)
+        pdf.set_font("Helvetica", "", 11)
+        pdf.multi_cell(0, 7, "Please make payment using the Nordea banking information stated on this invoice.")
+
+    pdf.set_xy(10, max(pdf.get_y() + 8, 100))
     today = datetime.date.today().strftime("%d/%m/%Y")
     due_date_fmt = due_date.strftime("%d/%m/%Y")
     currency_note = get_currency_note(currency)
@@ -172,6 +209,7 @@ with tab1:
     receiver = st.selectbox("Select Customer", customers, format_func=lambda x: x.name if x else "")
     invoice_number = st.text_input("Invoice Number")
     currency = st.selectbox("Currency", ["DKK", "EUR", "USD", "GBP"])
+    bank_choice = st.selectbox("Bank for payment", ["Nordea", "Revolut"], index=0)
     invoice_purpose = st.text_input("Invoice Description (e.g. Transfers in May 2025)")
     due_date = st.date_input("Due Date")
     mode = st.radio("Select Amount Mode", ["Manual", "Auto from Excel"])
@@ -223,12 +261,31 @@ with tab1:
                 final_buffer = BytesIO()
                 wb.save(final_buffer)
                 preview_excel(cleaned_df)
-                st.download_button("⬇️ Download Specification XLSX", data=final_buffer.getvalue(), file_name=f"SERVICE SPECIFICATION FOR INVOICE {invoice_number}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                st.download_button(
+                    "⬇️ Download Specification XLSX",
+                    data=final_buffer.getvalue(),
+                    file_name=f"SERVICE SPECIFICATION FOR INVOICE {invoice_number}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
 
             final_total = convert_currency(total_amount_dkk, currency) if mode == "Auto from Excel" and currency != "DKK" else total_amount_dkk
-            pdf_bytes = generate_invoice_pdf(receiver, invoice_number, currency, invoice_purpose, final_total, booking_count, due_date)
+            pdf_bytes = generate_invoice_pdf(
+                receiver,
+                invoice_number,
+                currency,
+                invoice_purpose,
+                final_total,
+                booking_count,
+                due_date,
+                bank_choice
+            )
             st.markdown(preview_pdf(pdf_bytes), unsafe_allow_html=True)
-            st.download_button("⬇️ Download PDF Invoice", data=pdf_bytes, file_name=f"Invoice {invoice_number} for {receiver.name}.pdf", mime="application/pdf")
+            st.download_button(
+                "⬇️ Download PDF Invoice",
+                data=pdf_bytes,
+                file_name=f"Invoice {invoice_number} for {receiver.name}.pdf",
+                mime="application/pdf"
+            )
 
 with tab2:
     st.subheader("Manage Customers")
