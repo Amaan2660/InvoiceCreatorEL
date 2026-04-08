@@ -591,28 +591,68 @@ with tab1:
                             include = st.checkbox("Include this invoice", value=True, key=f"bulk_include_{idx}")
                             send_email_flag = st.checkbox("Mark for email sending", value=bool(default_email), key=f"bulk_send_email_{idx}")
 
+                            match_key = f"bulk_match_customer_{idx}"
+                            name_key = f"bulk_recipient_name_{idx}"
+                            email_key = f"bulk_email_{idx}"
+                            address_key = f"bulk_address_{idx}"
+                            contact_key = f"bulk_contact_{idx}"
+                            vat_key = f"bulk_vat_{idx}"
+                            company_key = f"bulk_is_company_{idx}"
+
+                            options_list = [None] + customers
+                            default_index = options_list.index(default_customer) if default_customer in customers else 0
+
                             chosen_db_customer = st.selectbox(
                                 "Match saved customer",
-                                options=[None] + customers,
-                                index=([None] + customers).index(default_customer) if default_customer in customers else 0,
+                                options=options_list,
+                                index=default_index,
                                 format_func=lambda x: x.name if x else "No match / custom values",
-                                key=f"bulk_match_customer_{idx}"
+                                key=match_key
                             )
 
-                            if chosen_db_customer:
-                                default_name = chosen_db_customer.name or default_name
-                                default_address = chosen_db_customer.address or default_address
-                                default_email = chosen_db_customer.email or default_email
-                                default_contact = chosen_db_customer.contact or default_contact
-                                default_vat = chosen_db_customer.vat or default_vat
-                                default_is_company = bool(chosen_db_customer.is_company)
+                            if f"{match_key}_last_id" not in st.session_state:
+                                st.session_state[f"{match_key}_last_id"] = chosen_db_customer.id if chosen_db_customer else None
 
-                            recipient_name = st.text_input("Recipient Name", value=default_name, key=f"bulk_recipient_name_{idx}")
-                            recipient_email = st.text_input("Recipient Email", value=default_email, key=f"bulk_email_{idx}")
-                            recipient_address = st.text_input("Recipient Address", value=default_address, key=f"bulk_address_{idx}")
-                            recipient_contact = st.text_input("Recipient Contact", value=default_contact, key=f"bulk_contact_{idx}")
-                            recipient_vat = st.text_input("Recipient VAT Number", value=default_vat, key=f"bulk_vat_{idx}")
-                            recipient_is_company = st.checkbox("Recipient Is Company", value=default_is_company, key=f"bulk_is_company_{idx}")
+                            current_id = chosen_db_customer.id if chosen_db_customer else None
+                            previous_id = st.session_state[f"{match_key}_last_id"]
+
+                            if previous_id != current_id:
+                                if chosen_db_customer:
+                                    st.session_state[name_key] = chosen_db_customer.name or ""
+                                    st.session_state[email_key] = chosen_db_customer.email or ""
+                                    st.session_state[address_key] = chosen_db_customer.address or ""
+                                    st.session_state[contact_key] = chosen_db_customer.contact or ""
+                                    st.session_state[vat_key] = chosen_db_customer.vat or ""
+                                    st.session_state[company_key] = bool(chosen_db_customer.is_company)
+                                else:
+                                    st.session_state[name_key] = group_name
+                                    st.session_state[email_key] = ""
+                                    st.session_state[address_key] = ""
+                                    st.session_state[contact_key] = ""
+                                    st.session_state[vat_key] = ""
+                                    st.session_state[company_key] = True
+
+                                st.session_state[f"{match_key}_last_id"] = current_id
+
+                            if name_key not in st.session_state:
+                                st.session_state[name_key] = default_name
+                            if email_key not in st.session_state:
+                                st.session_state[email_key] = default_email
+                            if address_key not in st.session_state:
+                                st.session_state[address_key] = default_address
+                            if contact_key not in st.session_state:
+                                st.session_state[contact_key] = default_contact
+                            if vat_key not in st.session_state:
+                                st.session_state[vat_key] = default_vat
+                            if company_key not in st.session_state:
+                                st.session_state[company_key] = default_is_company
+
+                            recipient_name = st.text_input("Recipient Name", key=name_key)
+                            recipient_email = st.text_input("Recipient Email", key=email_key)
+                            recipient_address = st.text_input("Recipient Address", key=address_key)
+                            recipient_contact = st.text_input("Recipient Contact", key=contact_key)
+                            recipient_vat = st.text_input("Recipient VAT Number", key=vat_key)
+                            recipient_is_company = st.checkbox("Recipient Is Company", key=company_key)
 
                             col_a, col_b, col_c = st.columns(3)
                             with col_a:
@@ -924,3 +964,5 @@ with tab2:
                 st.success("Customer added successfully.")
             else:
                 st.warning("Name is required.")
+
+ 
