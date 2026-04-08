@@ -654,7 +654,7 @@ with tab1:
                             recipient_vat = st.text_input("Recipient VAT Number", key=vat_key)
                             recipient_is_company = st.checkbox("Recipient Is Company", key=company_key)
 
-                                                      invoice_key = f"bulk_invoice_number_{idx}"
+                            invoice_key = f"bulk_invoice_number_{idx}"
                             start_seed_key = f"bulk_invoice_seed_{idx}"
 
                             if invoice_key not in st.session_state:
@@ -981,5 +981,4 @@ with tab2:
                 st.success("Customer added successfully.")
             else:
                 st.warning("Name is required.")
-
  
