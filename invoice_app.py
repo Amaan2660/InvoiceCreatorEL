@@ -1,5 +1,5 @@
 # Updated Streamlit Invoice App with Single + Bulk Invoice Creation,
-# Gmail sending, persistent downloads, and Nordea/Revolut bank selection
+# Gmail sending after generation, persistent downloads, and Nordea/Revolut bank selection
 
 import datetime
 import pandas as pd
@@ -222,11 +222,12 @@ def send_email_gmail(to_email, subject, body, attachments):
     msg.set_content(body)
 
     for attachment in attachments:
-        filename = attachment["filename"]
-        content = attachment["content"]
-        maintype = attachment["maintype"]
-        subtype = attachment["subtype"]
-        msg.add_attachment(content, maintype=maintype, subtype=subtype, filename=filename)
+        msg.add_attachment(
+            attachment["content"],
+            maintype=attachment["maintype"],
+            subtype=attachment["subtype"],
+            filename=attachment["filename"]
+        )
 
     with smtplib.SMTP(st.secrets["SMTP_HOST"], int(st.secrets["SMTP_PORT"])) as server:
         server.starttls()
@@ -248,7 +249,6 @@ def generate_invoice_pdf(receiver, invoice_number, currency, description, total_
     pdf.set_xy(150, 10)
     pdf.cell(0, 10, f"INVOICE {invoice_number}", ln=True)
 
-    # From block
     pdf.set_font("Helvetica", size=11)
     pdf.set_xy(10, 30)
     pdf.set_font("Helvetica", "B", 11)
@@ -273,7 +273,6 @@ Email: limoexpresscph@gmail.com"""
 
     pdf.multi_cell(90, 6, sender_text)
 
-    # To block
     pdf.set_xy(120, 30)
     pdf.set_font("Helvetica", "B", 11)
     pdf.cell(0, 6, "To:", ln=True)
@@ -295,7 +294,6 @@ Email: limoexpresscph@gmail.com"""
         pdf.set_x(120)
         pdf.multi_cell(80, 6, f"Email: {receiver['email']}")
 
-    # Invoice details
     pdf.set_xy(10, 100)
     today = datetime.date.today().strftime("%d/%m/%Y")
     due_date_fmt = due_date.strftime("%d/%m/%Y") if hasattr(due_date, "strftime") else str(due_date)
@@ -305,7 +303,6 @@ Email: limoexpresscph@gmail.com"""
     pdf.cell(0, 6, f"Currency: {currency_note}", ln=True)
     pdf.ln(10)
 
-    # Invoice table
     pdf.set_font("Helvetica", "B", 12)
     pdf.cell(120, 8, "Description", border=1)
     pdf.cell(30, 8, "Qty", border=1)
@@ -381,8 +378,7 @@ def validate_bulk_rows(rows):
     invoice_numbers = []
 
     for idx, row in enumerate(rows, start=1):
-        include_row = row.get("include", True)
-        if not include_row:
+        if not row.get("include", True):
             continue
 
         invoice_number = str(row.get("invoice_number", "")).strip()
@@ -394,12 +390,6 @@ def validate_bulk_rows(rows):
         recipient_name = str(row.get("recipient_name", "")).strip()
         if not recipient_name:
             errors.append(f"Row {idx}: Recipient name is required.")
-
-        send_email = row.get("send_email", False)
-        if send_email:
-            email = str(row.get("email", "")).strip()
-            if not email:
-                errors.append(f"Row {idx}: Email is required if Send Email is selected.")
 
     duplicates = pd.Series(invoice_numbers).duplicated(keep=False) if invoice_numbers else pd.Series(dtype=bool)
     if len(invoice_numbers) > 0 and duplicates.any():
@@ -453,7 +443,6 @@ tab1, tab2 = st.tabs(["🧾 Create Invoice", "👥 Manage Customers"])
 
 with tab1:
     st.subheader("Create Invoice")
-
     customers = get_customers()
 
     creation_mode = st.radio(
@@ -462,7 +451,6 @@ with tab1:
         horizontal=True
     )
 
-    # ------------------- SINGLE INVOICE MODE -------------------
     if creation_mode == "Single Invoice":
         receiver = st.selectbox("Select Customer", customers, format_func=lambda x: x.name if x else "")
         invoice_number = st.text_input("Invoice Number")
@@ -547,10 +535,10 @@ with tab1:
                 key="download_single_pdf"
             )
 
-    # ------------------- BULK INVOICES MODE -------------------
     else:
         st.markdown("### Bulk Invoice Creation")
         st.caption("Upload one Excel file with many trips. The app will group rows by Customer.")
+        st.info("Invoices are generated first. After generation, you can choose which ones to email and send them together.")
 
         bulk_uploaded = st.file_uploader("Upload Bulk Excel File", type=["xls", "xlsx"], key="bulk_file")
         default_due_date = st.date_input("Default Due Date", value=datetime.date.today(), key="bulk_default_due")
@@ -565,7 +553,6 @@ with tab1:
             "Starting Invoice Number (optional, used to prefill)",
             key="bulk_start_invoice_number"
         )
-        auto_send_after_generate = st.checkbox("Send emails immediately after generating selected invoices", key="bulk_auto_send")
 
         if bulk_uploaded:
             try:
@@ -602,7 +589,8 @@ with tab1:
 
                         with st.expander(f"{group_name} — {group['trip_count']} trips — {group['total_dkk']:,.2f} DKK", expanded=False):
                             include = st.checkbox("Include this invoice", value=True, key=f"bulk_include_{idx}")
-                            send_email_flag = st.checkbox("Send Email", value=bool(default_email), key=f"bulk_send_email_{idx}")
+                            send_email_flag = st.checkbox("Mark for email sending", value=bool(default_email), key=f"bulk_send_email_{idx}")
+
                             chosen_db_customer = st.selectbox(
                                 "Match saved customer",
                                 options=[None] + customers,
@@ -626,9 +614,24 @@ with tab1:
                             recipient_vat = st.text_input("Recipient VAT Number", value=default_vat, key=f"bulk_vat_{idx}")
                             recipient_is_company = st.checkbox("Recipient Is Company", value=default_is_company, key=f"bulk_is_company_{idx}")
 
-                            invoice_number_val = st.text_input("Invoice Number", value=default_invoice, key=f"bulk_invoice_number_{idx}")
-                            currency_val = st.selectbox("Currency", ["DKK", "EUR", "USD", "GBP"], index=["DKK", "EUR", "USD", "GBP"].index(default_currency), key=f"bulk_currency_{idx}")
-                            bank_val = st.selectbox("Bank", ["Nordea", "Revolut"], index=["Nordea", "Revolut"].index(default_bank), key=f"bulk_bank_{idx}")
+                            col_a, col_b, col_c = st.columns(3)
+                            with col_a:
+                                invoice_number_val = st.text_input("Invoice Number", value=default_invoice, key=f"bulk_invoice_number_{idx}")
+                            with col_b:
+                                currency_val = st.selectbox(
+                                    "Currency",
+                                    ["DKK", "EUR", "USD", "GBP"],
+                                    index=["DKK", "EUR", "USD", "GBP"].index(default_currency),
+                                    key=f"bulk_currency_{idx}"
+                                )
+                            with col_c:
+                                bank_val = st.selectbox(
+                                    "Bank",
+                                    ["Nordea", "Revolut"],
+                                    index=["Nordea", "Revolut"].index(default_bank),
+                                    key=f"bulk_bank_{idx}"
+                                )
+
                             due_date_val = st.date_input("Due Date", value=default_due_date, key=f"bulk_due_date_{idx}")
                             description_val = st.text_input("Description", value=default_description, key=f"bulk_description_{idx}")
 
@@ -639,8 +642,9 @@ with tab1:
                                 "Trips": group["trip_count"],
                                 "Total DKK": round(group["total_dkk"], 2),
                                 "Invoice Number": invoice_number_val,
+                                "Currency": currency_val,
                                 "Email": recipient_email,
-                                "Send Email": send_email_flag,
+                                "Mark for Sending": send_email_flag,
                             })
 
                             bulk_rows.append({
@@ -676,8 +680,6 @@ with tab1:
                                 st.error(error)
                         else:
                             results = []
-                            send_failures = []
-                            send_success_count = 0
 
                             for row in bulk_rows:
                                 if not row["include"]:
@@ -712,50 +714,19 @@ with tab1:
                                     "due_date": row["due_date"],
                                     "trip_count": row["trip_count"],
                                     "total_dkk": row["total_dkk"],
-                                    "send_email": row["send_email"],
+                                    "marked_for_sending": row["send_email"],
+                                    "send_selected_now": row["send_email"],
                                     **package,
                                 }
                                 results.append(result)
-
-                                if auto_send_after_generate and row["send_email"]:
-                                    try:
-                                        email_subject = f"Invoice {row['invoice_number']}"
-                                        email_body = build_email_body(
-                                            customer_name=row["recipient_name"],
-                                            invoice_number=row["invoice_number"],
-                                            due_date=row["due_date"],
-                                            currency=row["currency"]
-                                        )
-                                        send_email_gmail(
-                                            to_email=row["email"],
-                                            subject=email_subject,
-                                            body=email_body,
-                                            attachments=[
-                                                {
-                                                    "filename": package["pdf_filename"],
-                                                    "content": package["pdf_bytes"],
-                                                    "maintype": "application",
-                                                    "subtype": "pdf",
-                                                },
-                                                {
-                                                    "filename": package["spec_filename"],
-                                                    "content": package["spec_bytes"],
-                                                    "maintype": "application",
-                                                    "subtype": "vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                                                },
-                                            ]
-                                        )
-                                        send_success_count += 1
-                                    except Exception as e:
-                                        send_failures.append(f"{row['recipient_name']} ({row['invoice_number']}): {e}")
 
                             st.session_state.bulk_results = results
                             st.session_state.bulk_zip_bytes = create_zip_from_bulk_results(results) if results else None
                             st.session_state.bulk_zip_name = "bulk_invoices.zip"
                             st.session_state.bulk_last_run_summary = {
                                 "generated_count": len(results),
-                                "sent_count": send_success_count,
-                                "send_failures": send_failures,
+                                "sent_count": 0,
+                                "send_failures": [],
                             }
 
                             if results:
@@ -763,17 +734,11 @@ with tab1:
                             else:
                                 st.warning("No invoices were generated.")
 
-                            if auto_send_after_generate:
-                                if send_success_count:
-                                    st.success(f"Sent {send_success_count} email(s).")
-                                for failure in send_failures:
-                                    st.error(failure)
-
                     if st.session_state.bulk_results:
                         st.markdown("### Generated Bulk Invoices")
 
                         summary_rows = []
-                        for idx, result in enumerate(st.session_state.bulk_results):
+                        for result in st.session_state.bulk_results:
                             summary_rows.append({
                                 "Recipient": result["recipient_name"],
                                 "Invoice Number": result["invoice_number"],
@@ -811,52 +776,98 @@ with tab1:
                                 key=f"bulk_spec_{idx}"
                             )
 
-                        if not auto_send_after_generate:
-                            st.markdown("### Send Selected Generated Invoices by Email")
-                            for idx, result in enumerate(st.session_state.bulk_results):
-                                col1, col2 = st.columns([3, 1])
-                                with col1:
-                                    st.write(f"{result['recipient_name']} — {result['recipient_email']} — Invoice {result['invoice_number']}")
-                                with col2:
-                                    if st.button(f"Send now", key=f"send_bulk_now_{idx}"):
-                                        if not result["recipient_email"]:
-                                            st.error("Missing recipient email.")
-                                        else:
-                                            try:
-                                                email_subject = f"Invoice {result['invoice_number']}"
-                                                email_body = build_email_body(
-                                                    customer_name=result["recipient_name"],
-                                                    invoice_number=result["invoice_number"],
-                                                    due_date=result["due_date"],
-                                                    currency=result["currency"]
-                                                )
-                                                send_email_gmail(
-                                                    to_email=result["recipient_email"],
-                                                    subject=email_subject,
-                                                    body=email_body,
-                                                    attachments=[
-                                                        {
-                                                            "filename": result["pdf_filename"],
-                                                            "content": result["pdf_bytes"],
-                                                            "maintype": "application",
-                                                            "subtype": "pdf",
-                                                        },
-                                                        {
-                                                            "filename": result["spec_filename"],
-                                                            "content": result["spec_bytes"],
-                                                            "maintype": "application",
-                                                            "subtype": "vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                                                        },
-                                                    ]
-                                                )
-                                                st.success(f"Sent invoice {result['invoice_number']} to {result['recipient_email']}")
-                                            except Exception as e:
-                                                st.error(f"Could not send email: {e}")
+                        st.markdown("### Choose Which Generated Invoices to Send")
+
+                        send_selection_rows = []
+                        for idx, result in enumerate(st.session_state.bulk_results):
+                            col1, col2 = st.columns([4, 1])
+                            with col1:
+                                send_now = st.checkbox(
+                                    f"{result['recipient_name']} — {result['recipient_email']} — Invoice {result['invoice_number']}",
+                                    value=result.get("send_selected_now", result.get("marked_for_sending", False)),
+                                    key=f"send_select_generated_{idx}"
+                                )
+                                result["send_selected_now"] = send_now
+                            with col2:
+                                st.write(result["currency"])
+
+                            send_selection_rows.append({
+                                "Send": result["send_selected_now"],
+                                "Recipient": result["recipient_name"],
+                                "Email": result["recipient_email"],
+                                "Invoice Number": result["invoice_number"],
+                                "Currency": result["currency"],
+                            })
+
+                        if send_selection_rows:
+                            preview_excel(pd.DataFrame(send_selection_rows))
+
+                        if st.button("Send Selected Emails", key="send_all_selected_bulk"):
+                            send_failures = []
+                            send_success_count = 0
+                            selected_count = 0
+
+                            for result in st.session_state.bulk_results:
+                                if not result.get("send_selected_now", False):
+                                    continue
+
+                                selected_count += 1
+
+                                if not result["recipient_email"]:
+                                    send_failures.append(
+                                        f"{result['recipient_name']} ({result['invoice_number']}): Missing recipient email."
+                                    )
+                                    continue
+
+                                try:
+                                    email_subject = f"Invoice {result['invoice_number']}"
+                                    email_body = build_email_body(
+                                        customer_name=result["recipient_name"],
+                                        invoice_number=result["invoice_number"],
+                                        due_date=result["due_date"],
+                                        currency=result["currency"]
+                                    )
+                                    send_email_gmail(
+                                        to_email=result["recipient_email"],
+                                        subject=email_subject,
+                                        body=email_body,
+                                        attachments=[
+                                            {
+                                                "filename": result["pdf_filename"],
+                                                "content": result["pdf_bytes"],
+                                                "maintype": "application",
+                                                "subtype": "pdf",
+                                            },
+                                            {
+                                                "filename": result["spec_filename"],
+                                                "content": result["spec_bytes"],
+                                                "maintype": "application",
+                                                "subtype": "vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                            },
+                                        ]
+                                    )
+                                    send_success_count += 1
+                                except Exception as e:
+                                    send_failures.append(
+                                        f"{result['recipient_name']} ({result['invoice_number']}): {e}"
+                                    )
+
+                            st.session_state.bulk_last_run_summary = {
+                                "generated_count": len(st.session_state.bulk_results),
+                                "sent_count": send_success_count,
+                                "send_failures": send_failures,
+                            }
+
+                            if selected_count == 0:
+                                st.warning("No invoices were selected for sending.")
+                            else:
+                                st.success(f"Sent {send_success_count} email(s).")
+                                for failure in send_failures:
+                                    st.error(failure)
 
             except Exception as e:
                 st.error(f"Could not process bulk Excel file: {e}")
 
-# ------------------- MANAGE CUSTOMERS -------------------
 with tab2:
     st.subheader("Manage Customers")
 
