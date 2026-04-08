@@ -654,9 +654,26 @@ with tab1:
                             recipient_vat = st.text_input("Recipient VAT Number", key=vat_key)
                             recipient_is_company = st.checkbox("Recipient Is Company", key=company_key)
 
+                                                      invoice_key = f"bulk_invoice_number_{idx}"
+                            start_seed_key = f"bulk_invoice_seed_{idx}"
+
+                            if invoice_key not in st.session_state:
+                                st.session_state[invoice_key] = default_invoice
+
+                            if start_seed_key not in st.session_state:
+                                st.session_state[start_seed_key] = starting_invoice_number.strip()
+
+                            current_seed = starting_invoice_number.strip()
+                            previous_seed = st.session_state[start_seed_key]
+
+                            if current_seed != previous_seed:
+                                if current_seed.isdigit() and not str(st.session_state[invoice_key]).strip():
+                                    st.session_state[invoice_key] = str(int(current_seed) + idx)
+                                st.session_state[start_seed_key] = current_seed
+
                             col_a, col_b, col_c = st.columns(3)
                             with col_a:
-                                invoice_number_val = st.text_input("Invoice Number", value=default_invoice, key=f"bulk_invoice_number_{idx}")
+                                invoice_number_val = st.text_input("Invoice Number", key=invoice_key)
                             with col_b:
                                 currency_val = st.selectbox(
                                     "Currency",
