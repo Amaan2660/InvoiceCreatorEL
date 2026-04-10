@@ -671,6 +671,20 @@ with tab1:
                                     st.session_state[invoice_key] = str(int(current_seed) + idx)
                                 st.session_state[start_seed_key] = current_seed
 
+                            desc_key = f"bulk_description_{idx}"
+                            desc_seed_key = f"bulk_description_seed_{idx}"
+
+                            if desc_key not in st.session_state:
+                                st.session_state[desc_key] = default_description
+
+                            if desc_seed_key not in st.session_state:
+                                st.session_state[desc_seed_key] = default_description
+
+                            if default_description != st.session_state[desc_seed_key]:
+                                if not st.session_state[desc_key]:
+                                    st.session_state[desc_key] = default_description
+                                st.session_state[desc_seed_key] = default_description
+
                             col_a, col_b, col_c = st.columns(3)
                             with col_a:
                                 invoice_number_val = st.text_input("Invoice Number", key=invoice_key)
@@ -690,7 +704,7 @@ with tab1:
                                 )
 
                             due_date_val = st.date_input("Due Date", value=default_due_date, key=f"bulk_due_date_{idx}")
-                            description_val = st.text_input("Description", value=default_description, key=f"bulk_description_{idx}")
+                            description_val = st.text_input("Description", key=desc_key)
 
                             preview_rows.append({
                                 "Include": include,
@@ -702,6 +716,7 @@ with tab1:
                                 "Currency": currency_val,
                                 "Email": recipient_email,
                                 "Mark for Sending": send_email_flag,
+                                "Description": description_val,
                             })
 
                             bulk_rows.append({
@@ -981,4 +996,3 @@ with tab2:
                 st.success("Customer added successfully.")
             else:
                 st.warning("Name is required.")
- 
