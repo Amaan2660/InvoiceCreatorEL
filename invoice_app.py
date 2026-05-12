@@ -591,12 +591,12 @@ with tab1:
                         with st.expander(f"{group_name} — {group['trip_count']} trips — {group['total_dkk']:,.2f} DKK", expanded=False):
                             include = st.checkbox("Include this invoice", value=True, key=f"bulk_include_{idx}")
                                 
-                                # Recalculate invoice numbers for all included rows when include changes
-                                include_changed_key = f"bulk_include_prev_{idx}"
-                                if include_changed_key not in st.session_state:
+                            # Recalculate invoice numbers for all included rows when include changes
+                            include_changed_key = f"bulk_include_prev_{idx}"
+                            if include_changed_key not in st.session_state:
                                     st.session_state[include_changed_key] = True
                                 
-                                if st.session_state[include_changed_key] != include:
+                            if st.session_state[include_changed_key] != include:
                                     st.session_state[include_changed_key] = include
                                     if not include:
                                         st.session_state[f"bulk_invoice_number_{idx}"] = ""
