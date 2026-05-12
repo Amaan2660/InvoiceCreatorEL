@@ -37,17 +37,10 @@ for key, value in SESSION_DEFAULTS.items():
         st.session_state[key] = value
 
 # ------------------- DATABASE SETUP -------------------
-try:
-    DB_URL = st.secrets["SUPABASE_DB_URL"].replace("postgres://", "postgresql://", 1)
-except KeyError:
-    st.error("Missing SUPABASE_DB_URL in secrets. Check your Streamlit secrets configuration.")
-    st.stop()
-
-engine = create_engine(
-    DB_URL,
-    connect_args={"sslmode": "require"},
-    pool_pre_ping=True,
-)
+DB_URL = st.secrets["SUPABASE_DB_URL"]
+engine = create_engine(DB_URL)
+Base = declarative_base()
+SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
 
 
 class Customer(Base):
@@ -534,13 +527,14 @@ with tab1:
             )
 
         if st.session_state.single_generated_pdf_bytes is not None:
+            st.markdown(preview_pdf(st.session_state.single_generated_pdf_bytes), unsafe_allow_html=True)
             st.download_button(
                 "⬇️ Download PDF Invoice",
                 data=st.session_state.single_generated_pdf_bytes,
                 file_name=st.session_state.single_generated_pdf_name,
                 mime="application/pdf",
                 key="download_single_pdf"
-    )
+            )
 
     else:
         st.markdown("### Bulk Invoice Creation")
