@@ -682,8 +682,7 @@ with tab1:
                                 st.session_state[desc_seed_key] = default_description
 
                             if default_description != st.session_state[desc_seed_key]:
-                                if not st.session_state[desc_key]:
-                                    st.session_state[desc_key] = default_description
+                                st.session_state[desc_key] = default_description
                                 st.session_state[desc_seed_key] = default_description
 
                             col_a, col_b, col_c = st.columns(3)
