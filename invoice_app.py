@@ -705,7 +705,8 @@ with tab1:
 
                             col_a, col_b, col_c = st.columns(3)
                             with col_a:
-                                invoice_number_val = st.text_input("Invoice Number", value=st.session_state[val_key], key=invoice_key)
+                                st.session_state[invoice_key] = st.session_state[val_key]
+                                invoice_number_val = st.text_input("Invoice Number", key=invoice_key)
                             with col_b:
                                 currency_val = st.selectbox(
                                     "Currency",
