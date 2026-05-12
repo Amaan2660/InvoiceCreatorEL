@@ -596,18 +596,18 @@ with tab1:
                             if include_changed_key not in st.session_state:
                                     st.session_state[include_changed_key] = True
                                 
-                            if st.session_state[include_changed_key] != include:
-                                    st.session_state[include_changed_key] = include
-                                    if not include:
-                                        st.session_state[f"bulk_invoice_number_{idx}"] = ""
-                                    else:
-                                        # Recalculate sequence number based on how many included rows come before this one
-                                        if starting_invoice_number.strip().isdigit():
-                                            included_before = sum(
-                                                1 for i in range(idx)
-                                                if st.session_state.get(f"bulk_include_{i}", True)
-                                            )
-                                            st.session_state[f"bulk_invoice_number_{idx}"] = str(int(starting_invoice_number.strip()) + included_before)
+                           if st.session_state[include_changed_key] != include:
+                                st.session_state[include_changed_key] = include
+                                # Recalculate ALL groups when any include changes
+                                if starting_invoice_number.strip().isdigit():
+                                    counter = int(starting_invoice_number.strip())
+                                    for i in range(len(bulk_groups)):
+                                        is_included = st.session_state.get(f"bulk_include_{i}", True)
+                                        if is_included:
+                                            st.session_state[f"bulk_invoice_number_{i}"] = str(counter)
+                                            counter += 1
+                                        else:
+                                            st.session_state[f"bulk_invoice_number_{i}"] = ""
                             send_email_flag = st.checkbox("Mark for email sending", value=bool(default_email), key=f"bulk_send_email_{idx}")
 
                             match_key = f"bulk_match_customer_{idx}"
