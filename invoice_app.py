@@ -590,6 +590,24 @@ with tab1:
 
                         with st.expander(f"{group_name} — {group['trip_count']} trips — {group['total_dkk']:,.2f} DKK", expanded=False):
                             include = st.checkbox("Include this invoice", value=True, key=f"bulk_include_{idx}")
+                                
+                                # Recalculate invoice numbers for all included rows when include changes
+                                include_changed_key = f"bulk_include_prev_{idx}"
+                                if include_changed_key not in st.session_state:
+                                    st.session_state[include_changed_key] = True
+                                
+                                if st.session_state[include_changed_key] != include:
+                                    st.session_state[include_changed_key] = include
+                                    if not include:
+                                        st.session_state[f"bulk_invoice_number_{idx}"] = ""
+                                    else:
+                                        # Recalculate sequence number based on how many included rows come before this one
+                                        if starting_invoice_number.strip().isdigit():
+                                            included_before = sum(
+                                                1 for i in range(idx)
+                                                if st.session_state.get(f"bulk_include_{i}", True)
+                                            )
+                                            st.session_state[f"bulk_invoice_number_{idx}"] = str(int(starting_invoice_number.strip()) + included_before)
                             send_email_flag = st.checkbox("Mark for email sending", value=bool(default_email), key=f"bulk_send_email_{idx}")
 
                             match_key = f"bulk_match_customer_{idx}"
