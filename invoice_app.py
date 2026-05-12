@@ -602,10 +602,10 @@ with tab1:
                                     for i in range(len(bulk_groups)):
                                         is_included = st.session_state.get(f"bulk_include_{i}", True)
                                         if is_included:
-                                            st.session_state[f"bulk_invoice_number_{i}"] = str(counter)
+                                            st.session_state[f"bulk_invoice_number_val_{i}"] = str(counter)
                                             counter += 1
                                         else:
-                                            st.session_state[f"bulk_invoice_number_{i}"] = ""
+                                            st.session_state[f"bulk_invoice_number_val_{i}"] = ""
                         
                             send_email_flag = st.checkbox("Mark for email sending", value=bool(default_email), key=f"bulk_send_email_{idx}")
 
@@ -673,10 +673,11 @@ with tab1:
                             recipient_is_company = st.checkbox("Recipient Is Company", key=company_key)
 
                             invoice_key = f"bulk_invoice_number_{idx}"
+                            val_key = f"bulk_invoice_number_val_{idx}"
                             start_seed_key = f"bulk_invoice_seed_{idx}"
 
-                            if invoice_key not in st.session_state:
-                                st.session_state[invoice_key] = default_invoice
+                            if val_key not in st.session_state:
+                                st.session_state[val_key] = default_invoice
 
                             if start_seed_key not in st.session_state:
                                 st.session_state[start_seed_key] = starting_invoice_number.strip()
@@ -704,7 +705,7 @@ with tab1:
 
                             col_a, col_b, col_c = st.columns(3)
                             with col_a:
-                                invoice_number_val = st.text_input("Invoice Number", key=invoice_key)
+                                invoice_number_val = st.text_input("Invoice Number", value=st.session_state[val_key], key=invoice_key)
                             with col_b:
                                 currency_val = st.selectbox(
                                     "Currency",
