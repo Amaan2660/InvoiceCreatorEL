@@ -37,11 +37,20 @@ for key, value in SESSION_DEFAULTS.items():
         st.session_state[key] = value
 
 # ------------------- DATABASE SETUP -------------------
-DB_URL = st.secrets["SUPABASE_DB_URL"]
-engine = create_engine(DB_URL)
 Base = declarative_base()
-SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
 
+try:
+    DB_URL = st.secrets["SUPABASE_DB_URL"].replace("postgres://", "postgresql://", 1)
+except KeyError:
+    st.error("Missing SUPABASE_DB_URL in secrets. Check your Streamlit secrets configuration.")
+    st.stop()
+
+engine = create_engine(
+    DB_URL,
+    connect_args={"sslmode": "require"},
+    pool_pre_ping=True,
+)
+SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
 
 class Customer(Base):
     __tablename__ = "customers"
@@ -52,6 +61,7 @@ class Customer(Base):
     contact = Column(String)
     vat = Column(String)
     is_company = Column(Boolean, default=True)
+    default_currency = Column(String, default="DKK")
 
 Base.metadata.create_all(bind=engine)
 
@@ -122,6 +132,7 @@ def customer_to_dict(customer):
             "contact": "",
             "vat": "",
             "is_company": True,
+            "default_currency": "DKK",
         }
     return {
         "id": customer.id,
@@ -131,11 +142,8 @@ def customer_to_dict(customer):
         "contact": customer.contact or "",
         "vat": customer.vat or "",
         "is_company": bool(customer.is_company),
+        "default_currency": customer.default_currency or "DKK",
     }
-
-def preview_pdf(bytes_pdf):
-    b64 = base64.b64encode(bytes_pdf).decode()
-    return f"<iframe src='data:application/pdf;base64,{b64}' width='700' height='900' type='application/pdf'></iframe>"
 
 def preview_excel(df):
     return st.dataframe(df, use_container_width=True)
@@ -455,7 +463,14 @@ with tab1:
     if creation_mode == "Single Invoice":
         receiver = st.selectbox("Select Customer", customers, format_func=lambda x: x.name if x else "")
         invoice_number = st.text_input("Invoice Number")
-        currency = st.selectbox("Currency", ["DKK", "EUR", "USD", "GBP"], key="single_currency")
+        currency_options = ["DKK", "EUR", "USD", "GBP"]
+        saved_currency = receiver.default_currency if receiver and receiver.default_currency else "DKK"
+        currency = st.selectbox(
+            "Currency",
+            currency_options,
+            index=currency_options.index(saved_currency) if saved_currency in currency_options else 0,
+            key="single_currency"
+        )
         bank_choice = st.selectbox("Bank for payment", ["Nordea", "Revolut"], index=0, key="single_bank")
         invoice_purpose = st.text_input("Invoice Description (e.g. Transfers in May 2025)")
         due_date = st.date_input("Due Date", key="single_due_date")
@@ -495,7 +510,7 @@ with tab1:
                     preview_df = cleaned_df.copy()
 
                 receiver_dict = customer_to_dict(receiver)
-                final_total = convert_currency(total_amount_dkk, currency) if mode == "Auto from Excel" and currency != "DKK" else total_amount_dkk
+                final_total = convert_currency(total_amount_dkk, currency) if currency != "DKK" else total_amount_dkk
 
                 pdf_bytes = generate_invoice_pdf(
                     receiver=receiver_dict,
@@ -527,7 +542,6 @@ with tab1:
             )
 
         if st.session_state.single_generated_pdf_bytes is not None:
-            st.markdown(preview_pdf(st.session_state.single_generated_pdf_bytes), unsafe_allow_html=True)
             st.download_button(
                 "⬇️ Download PDF Invoice",
                 data=st.session_state.single_generated_pdf_bytes,
@@ -587,14 +601,15 @@ with tab1:
                         default_contact = matched_customer.contact if matched_customer else ""
                         default_vat = matched_customer.vat if matched_customer else ""
                         default_is_company = bool(matched_customer.is_company) if matched_customer else True
+                        default_customer_currency = matched_customer.default_currency if matched_customer and matched_customer.default_currency else default_currency
 
                         with st.expander(f"{group_name} — {group['trip_count']} trips — {group['total_dkk']:,.2f} DKK", expanded=False):
                             include = st.checkbox("Include this invoice", value=True, key=f"bulk_include_{idx}")
-                        
+
                             include_changed_key = f"bulk_include_prev_{idx}"
                             if include_changed_key not in st.session_state:
                                 st.session_state[include_changed_key] = True
-                        
+
                             if st.session_state[include_changed_key] != include:
                                 st.session_state[include_changed_key] = include
                                 if starting_invoice_number.strip().isdigit():
@@ -606,7 +621,7 @@ with tab1:
                                             counter += 1
                                         else:
                                             st.session_state[f"bulk_invoice_number_val_{i}"] = ""
-                        
+
                             send_email_flag = st.checkbox("Mark for email sending", value=bool(default_email), key=f"bulk_send_email_{idx}")
 
                             match_key = f"bulk_match_customer_{idx}"
@@ -686,8 +701,8 @@ with tab1:
                             previous_seed = st.session_state[start_seed_key]
 
                             if current_seed != previous_seed:
-                                if current_seed.isdigit() and not str(st.session_state[invoice_key]).strip():
-                                    st.session_state[invoice_key] = str(int(current_seed) + idx)
+                                if current_seed.isdigit() and not str(st.session_state[val_key]).strip():
+                                    st.session_state[val_key] = str(int(current_seed) + idx)
                                 st.session_state[start_seed_key] = current_seed
 
                             desc_key = f"bulk_description_{idx}"
@@ -708,10 +723,11 @@ with tab1:
                                 st.session_state[invoice_key] = st.session_state[val_key]
                                 invoice_number_val = st.text_input("Invoice Number", key=invoice_key)
                             with col_b:
+                                currency_options_list = ["DKK", "EUR", "USD", "GBP"]
                                 currency_val = st.selectbox(
                                     "Currency",
-                                    ["DKK", "EUR", "USD", "GBP"],
-                                    index=["DKK", "EUR", "USD", "GBP"].index(default_currency),
+                                    currency_options_list,
+                                    index=currency_options_list.index(default_customer_currency) if default_customer_currency in currency_options_list else 0,
                                     key=f"bulk_currency_{idx}"
                                 )
                             with col_c:
@@ -976,6 +992,13 @@ with tab2:
                 contact = st.text_input("Contact", selected.contact)
                 vat = st.text_input("VAT Number", selected.vat)
                 is_company = st.checkbox("Is Company", selected.is_company)
+                currency_options = ["DKK", "EUR", "USD", "GBP"]
+                saved_currency = selected.default_currency or "DKK"
+                default_currency_field = st.selectbox(
+                    "Default Currency",
+                    currency_options,
+                    index=currency_options.index(saved_currency) if saved_currency in currency_options else 0
+                )
 
                 if st.button("Update Customer"):
                     update_customer(selected.id, {
@@ -984,7 +1007,8 @@ with tab2:
                         "address": address,
                         "contact": contact,
                         "vat": vat,
-                        "is_company": is_company
+                        "is_company": is_company,
+                        "default_currency": default_currency_field
                     })
                     st.success("Customer updated successfully.")
 
@@ -1001,6 +1025,7 @@ with tab2:
         new_contact = st.text_input("New Contact")
         new_vat = st.text_input("New VAT Number")
         new_is_company = st.checkbox("New Is Company", value=True)
+        new_currency = st.selectbox("Default Currency", ["DKK", "EUR", "USD", "GBP"], key="new_customer_currency")
 
         if st.button("Add Customer"):
             if new_name:
@@ -1010,7 +1035,8 @@ with tab2:
                     address=new_address,
                     contact=new_contact,
                     vat=new_vat,
-                    is_company=new_is_company
+                    is_company=new_is_company,
+                    default_currency=new_currency
                 )
                 st.success("Customer added successfully.")
             else:
