@@ -489,12 +489,22 @@ with tab1:
                 if mode == "Auto from Excel":
                     booking_count = int(cleaned_df.shape[0])
                     total_amount_dkk = float(cleaned_df['Base Rate'].sum())
+                # In Manual mode, do NOT read totals from the Excel file
             except Exception as e:
                 st.error(f"Could not read Excel file: {e}")
 
         if mode == "Manual":
-            total_amount_dkk = st.number_input("Manual Total Amount", min_value=0.0, step=100.0)
-            booking_count = st.number_input("Manual Number of Bookings", min_value=0)
+            total_amount_dkk = st.number_input(
+                "Manual Total Amount",
+                min_value=0.0,
+                step=100.0,
+                key="manual_total_amount"
+            )
+            booking_count = st.number_input(
+                "Manual Number of Bookings",
+                min_value=0,
+                key="manual_booking_count"
+            )
 
         if st.button("Generate Invoice", key="generate_single_invoice"):
             if not receiver or not invoice_number:
