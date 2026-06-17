@@ -30,6 +30,9 @@ SESSION_DEFAULTS = {
     "bulk_zip_bytes": None,
     "bulk_zip_name": None,
     "bulk_last_run_summary": None,
+    "manual_total_amount": 0.0,
+    "manual_booking_count": 0,
+    "single_amount_mode_prev": None,
 }
 
 for key, value in SESSION_DEFAULTS.items():
@@ -474,7 +477,12 @@ with tab1:
         bank_choice = st.selectbox("Bank for payment", ["Nordea", "Revolut"], index=0, key="single_bank")
         invoice_purpose = st.text_input("Invoice Description (e.g. Transfers in May 2025)")
         due_date = st.date_input("Due Date", key="single_due_date")
+        prev_mode = st.session_state.get("single_amount_mode_prev", None)
         mode = st.radio("Select Amount Mode", ["Manual", "Auto from Excel"], key="single_amount_mode")
+        if mode != prev_mode:
+            st.session_state["manual_total_amount"] = 0.0
+            st.session_state["manual_booking_count"] = 0
+            st.session_state["single_amount_mode_prev"] = mode
 
         uploaded = st.file_uploader("Upload Excel File", type=["xls", "xlsx"], key="single_file")
         total_amount_dkk = 0.0
@@ -498,13 +506,17 @@ with tab1:
                 "Manual Total Amount",
                 min_value=0.0,
                 step=100.0,
+                value=st.session_state["manual_total_amount"],
                 key="manual_total_amount"
             )
+            st.session_state["manual_total_amount"] = total_amount_dkk
             booking_count = st.number_input(
                 "Manual Number of Bookings",
                 min_value=0,
+                value=st.session_state["manual_booking_count"],
                 key="manual_booking_count"
             )
+            st.session_state["manual_booking_count"] = booking_count
 
         if st.button("Generate Invoice", key="generate_single_invoice"):
             if not receiver or not invoice_number:
