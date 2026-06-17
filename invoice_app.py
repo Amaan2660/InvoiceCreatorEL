@@ -496,7 +496,7 @@ with tab1:
 
         if mode == "Manual":
             st.number_input(
-                "Manual Total Amount",
+                f"Manual Total Amount (in {currency})",
                 min_value=0.0,
                 step=100.0,
                 key="manual_total_amount"
@@ -523,10 +523,11 @@ with tab1:
                 receiver_dict = customer_to_dict(receiver)
 
                 if mode == "Manual":
-                    total_amount_dkk = float(st.session_state.get("manual_total_amount", 0.0))
+                    # Manual amount is entered directly in the selected currency — no conversion needed
+                    final_total = float(st.session_state.get("manual_total_amount", 0.0))
                     booking_count = int(st.session_state.get("manual_booking_count", 0))
-
-                final_total = convert_currency(total_amount_dkk, currency) if currency != "DKK" else total_amount_dkk
+                else:
+                    final_total = convert_currency(total_amount_dkk, currency) if currency != "DKK" else total_amount_dkk
 
                 pdf_bytes = generate_invoice_pdf(
                     receiver=receiver_dict,
