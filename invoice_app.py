@@ -30,7 +30,6 @@ SESSION_DEFAULTS = {
     "bulk_zip_bytes": None,
     "bulk_zip_name": None,
     "bulk_last_run_summary": None,
-
 }
 
 for key, value in SESSION_DEFAULTS.items():
@@ -490,22 +489,12 @@ with tab1:
                 if mode == "Auto from Excel":
                     booking_count = int(cleaned_df.shape[0])
                     total_amount_dkk = float(cleaned_df['Base Rate'].sum())
-                # In Manual mode, do NOT read totals from the Excel file
             except Exception as e:
                 st.error(f"Could not read Excel file: {e}")
 
         if mode == "Manual":
-            st.number_input(
-                f"Manual Total Amount (in {currency})",
-                min_value=0.0,
-                step=100.0,
-                key="manual_total_amount"
-            )
-            st.number_input(
-                "Manual Number of Bookings",
-                min_value=0,
-                key="manual_booking_count"
-            )
+            total_amount_dkk = st.number_input("Manual Total Amount", min_value=0.0, step=100.0)
+            booking_count = st.number_input("Manual Number of Bookings", min_value=0)
 
         if st.button("Generate Invoice", key="generate_single_invoice"):
             if not receiver or not invoice_number:
@@ -521,13 +510,7 @@ with tab1:
                     preview_df = cleaned_df.copy()
 
                 receiver_dict = customer_to_dict(receiver)
-
-                if mode == "Manual":
-                    # Manual amount is entered directly in the selected currency — no conversion needed
-                    final_total = float(st.session_state.get("manual_total_amount", 0.0))
-                    booking_count = int(st.session_state.get("manual_booking_count", 0))
-                else:
-                    final_total = convert_currency(total_amount_dkk, currency) if currency != "DKK" else total_amount_dkk
+                final_total = convert_currency(total_amount_dkk, currency) if currency != "DKK" else total_amount_dkk
 
                 pdf_bytes = generate_invoice_pdf(
                     receiver=receiver_dict,
