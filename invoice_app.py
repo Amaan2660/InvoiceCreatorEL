@@ -587,6 +587,29 @@ with tab1:
                     else:
                         start_num = None
 
+                    # ---- FIX: globally re-seed every group's invoice number
+                    # whenever the Starting Invoice Number field changes, not
+                    # just on first render. This runs BEFORE the per-group
+                    # widgets are created below, so the text_inputs pick up
+                    # the corrected values immediately. ----
+                    if "bulk_start_invoice_prev" not in st.session_state:
+                        st.session_state["bulk_start_invoice_prev"] = starting_invoice_number.strip()
+
+                    if st.session_state["bulk_start_invoice_prev"] != starting_invoice_number.strip():
+                        st.session_state["bulk_start_invoice_prev"] = starting_invoice_number.strip()
+                        if start_num is not None:
+                            counter = start_num
+                            for i in range(len(bulk_groups)):
+                                is_included = st.session_state.get(f"bulk_include_{i}", True)
+                                if is_included:
+                                    st.session_state[f"bulk_invoice_number_val_{i}"] = str(counter)
+                                    counter += 1
+                                else:
+                                    st.session_state[f"bulk_invoice_number_val_{i}"] = ""
+                        else:
+                            for i in range(len(bulk_groups)):
+                                st.session_state[f"bulk_invoice_number_val_{i}"] = ""
+
                     bulk_rows = []
                     preview_rows = []
 
@@ -689,21 +712,9 @@ with tab1:
 
                             invoice_key = f"bulk_invoice_number_{idx}"
                             val_key = f"bulk_invoice_number_val_{idx}"
-                            start_seed_key = f"bulk_invoice_seed_{idx}"
 
                             if val_key not in st.session_state:
                                 st.session_state[val_key] = default_invoice
-
-                            if start_seed_key not in st.session_state:
-                                st.session_state[start_seed_key] = starting_invoice_number.strip()
-
-                            current_seed = starting_invoice_number.strip()
-                            previous_seed = st.session_state[start_seed_key]
-
-                            if current_seed != previous_seed:
-                                if current_seed.isdigit() and not str(st.session_state[val_key]).strip():
-                                    st.session_state[val_key] = str(int(current_seed) + idx)
-                                st.session_state[start_seed_key] = current_seed
 
                             desc_key = f"bulk_description_{idx}"
                             desc_seed_key = f"bulk_description_seed_{idx}"
