@@ -74,6 +74,19 @@ def get_customers():
     with SessionLocal() as session:
         return session.query(Customer).order_by(Customer.name).all()
 
+@st.cache_resource(ttl=60)
+def get_customers_cached():
+    # Cached wrapper: avoids hitting the DB and re-deserializing every
+    # customer on every single rerun (which happens on every keystroke
+    # in the bulk section). Cleared explicitly after any add/update/delete
+    # via get_customers_cached.clear() so edits show up immediately.
+    #
+    # Uses cache_resource (not cache_data) on purpose: cache_data pickles
+    # and copies the return value on every call, and live SQLAlchemy ORM
+    # objects can fail that round-trip, which silently aborted rendering
+    # mid-script and made the bulk customer groups disappear.
+    return get_customers()
+
 def update_customer(id, updates):
     with SessionLocal() as session:
         cust = session.get(Customer, id)
@@ -452,7 +465,7 @@ tab1, tab2 = st.tabs(["🧾 Create Invoice", "👥 Manage Customers"])
 
 with tab1:
     st.subheader("Create Invoice")
-    customers = get_customers()
+    customers = get_customers_cached()
 
     creation_mode = st.radio(
         "Invoice Mode",
@@ -1004,7 +1017,7 @@ with tab1:
 with tab2:
     st.subheader("Manage Customers")
 
-    customers = get_customers()
+    customers = get_customers_cached()
     if not customers:
         st.info("No customers found. Please add one below.")
     else:
@@ -1036,10 +1049,12 @@ with tab2:
                         "is_company": is_company,
                         "default_currency": default_currency_field
                     })
+                    get_customers_cached.clear()
                     st.success("Customer updated successfully.")
 
             if st.button("Delete Customer"):
                 delete_customer(selected.id)
+                get_customers_cached.clear()
                 st.success("Customer deleted successfully.")
 
         st.markdown("---")
@@ -1064,6 +1079,7 @@ with tab2:
                     is_company=new_is_company,
                     default_currency=new_currency
                 )
+                get_customers_cached.clear()
                 st.success("Customer added successfully.")
             else:
                 st.warning("Name is required.")
