@@ -610,6 +610,21 @@ with tab1:
                             for i in range(len(bulk_groups)):
                                 st.session_state[f"bulk_invoice_number_val_{i}"] = ""
 
+                    # ---- FIX: same pattern for Default Due Date. Once a
+                    # bulk_due_date_{idx} widget has been rendered once, its
+                    # session_state value wins over the `value=` kwarg on
+                    # every subsequent rerun, so changing "Default Due Date"
+                    # alone never touched the per-group fields. Detect the
+                    # change here and push it into every group's stored
+                    # value before the date_input widgets are created. ----
+                    if "bulk_default_due_prev" not in st.session_state:
+                        st.session_state["bulk_default_due_prev"] = default_due_date
+
+                    if st.session_state["bulk_default_due_prev"] != default_due_date:
+                        st.session_state["bulk_default_due_prev"] = default_due_date
+                        for i in range(len(bulk_groups)):
+                            st.session_state[f"bulk_due_date_{i}"] = default_due_date
+
                     bulk_rows = []
                     preview_rows = []
 
