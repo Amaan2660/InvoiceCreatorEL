@@ -25,6 +25,7 @@ SESSION_DEFAULTS = {
     "single_generated_spec_bytes": None,
     "single_generated_spec_name": None,
     "single_generated_preview_df": None,
+    "single_generated_meta": None,
     "bulk_preview_df": None,
     "bulk_results": [],
     "bulk_zip_bytes": None,
@@ -622,6 +623,16 @@ with tab1:
                 st.session_state.single_generated_spec_bytes = spec_bytes
                 st.session_state.single_generated_spec_name = spec_name
                 st.session_state.single_generated_preview_df = preview_df
+                # FIX: capture the metadata actually used for this invoice, so the
+                # email sent below always matches the attached PDF — even if the
+                # form fields (customer, due date, currency...) get changed afterward.
+                st.session_state.single_generated_meta = {
+                    "invoice_number": invoice_number,
+                    "due_date": due_date,
+                    "currency": currency,
+                    "receiver_name": receiver.name,
+                    "receiver_email": receiver.email or "",
+                }
 
         if st.session_state.single_generated_preview_df is not None:
             preview_excel(st.session_state.single_generated_preview_df)
@@ -643,6 +654,55 @@ with tab1:
                 mime="application/pdf",
                 key="download_single_pdf"
             )
+
+        # FIX: send the just-generated single invoice by the same Gmail account
+        # used for bulk sending, reusing send_email_gmail/build_email_body.
+        if st.session_state.single_generated_pdf_bytes is not None and st.session_state.single_generated_meta:
+            st.markdown("### Send Invoice via Email")
+            meta = st.session_state.single_generated_meta
+            recipient_email_single = st.text_input(
+                "Recipient Email",
+                value=meta.get("receiver_email", ""),
+                key="single_send_email_to"
+            )
+
+            if st.button("Send Email", key="send_single_invoice_email"):
+                if not recipient_email_single.strip():
+                    st.error("Recipient email is required to send.")
+                else:
+                    try:
+                        attachments = [
+                            {
+                                "filename": st.session_state.single_generated_pdf_name,
+                                "content": st.session_state.single_generated_pdf_bytes,
+                                "maintype": "application",
+                                "subtype": "pdf",
+                            }
+                        ]
+                        if st.session_state.single_generated_spec_bytes is not None:
+                            attachments.append({
+                                "filename": st.session_state.single_generated_spec_name,
+                                "content": st.session_state.single_generated_spec_bytes,
+                                "maintype": "application",
+                                "subtype": "vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            })
+
+                        email_body = build_email_body(
+                            customer_name=meta["receiver_name"],
+                            invoice_number=meta["invoice_number"],
+                            due_date=meta["due_date"],
+                            currency=meta["currency"]
+                        )
+
+                        send_email_gmail(
+                            to_email=recipient_email_single.strip(),
+                            subject=f"Invoice {meta['invoice_number']}",
+                            body=email_body,
+                            attachments=attachments
+                        )
+                        st.success(f"Email sent to {recipient_email_single.strip()}.")
+                    except Exception as e:
+                        st.error(f"Could not send email: {e}")
 
     else:
         st.markdown("### Bulk Invoice Creation")
@@ -933,13 +993,20 @@ with tab1:
                                 st.error(error)
                         else:
                             results = []
+                            # FIX: track *why* rows were skipped so "No invoices were
+                            # generated" isn't a dead end — you can see whether it's
+                            # because rows are unchecked or just missing a number.
+                            skipped_not_included = 0
+                            skipped_no_invoice_number = 0
 
                             for row in bulk_rows:
                                 if not row["include"]:
+                                    skipped_not_included += 1
                                     continue
                                 # FIX: skip rows left blank on purpose, consistent
                                 # with the relaxed validation above.
                                 if not str(row["invoice_number"]).strip():
+                                    skipped_no_invoice_number += 1
                                     continue
 
                                 receiver_dict = {
@@ -989,7 +1056,13 @@ with tab1:
                             if results:
                                 st.success(f"Generated {len(results)} invoice package(s).")
                             else:
-                                st.warning("No invoices were generated.")
+                                # FIX: explain why, instead of a bare "no invoices" dead end.
+                                st.warning(
+                                    "No invoices were generated. "
+                                    f"{skipped_not_included} row(s) had \"Include this invoice\" unchecked, "
+                                    f"{skipped_no_invoice_number} row(s) had no Invoice Number entered. "
+                                    "Fill in an Invoice Number for at least one included row and try again."
+                                )
 
                     if st.session_state.bulk_results:
                         st.markdown("### Generated Bulk Invoices")
