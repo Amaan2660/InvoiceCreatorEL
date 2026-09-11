@@ -63,6 +63,15 @@ class Customer(Base):
     is_company = Column(Boolean, default=True)
     default_currency = Column(String, default="DKK")
 
+class CustomerAlias(Base):
+    # Remembers which saved Customer a raw "Customer" name from an uploaded
+    # Excel file should map to, so the "Match saved customer" choice made
+    # once in the bulk flow is reused automatically on future uploads.
+    __tablename__ = "customer_aliases"
+    id = Column(Integer, primary_key=True, index=True)
+    raw_name = Column(String, nullable=False, unique=True, index=True)  # normalized (lowercase/stripped)
+    customer_id = Column(Integer, nullable=False)
+
 Base.metadata.create_all(bind=engine)
 
 def add_customer(**kwargs):
@@ -99,6 +108,38 @@ def delete_customer(id):
     with SessionLocal() as session:
         session.query(Customer).filter(Customer.id == id).delete()
         session.commit()
+
+# ---- Customer alias (remembered bulk match) helpers ----
+def get_customer_aliases():
+    with SessionLocal() as session:
+        return session.query(CustomerAlias).all()
+
+@st.cache_resource(ttl=60)
+def get_alias_map_cached():
+    # normalized raw Excel customer name -> saved Customer id
+    return {a.raw_name: a.customer_id for a in get_customer_aliases()}
+
+def save_customer_alias(raw_name, customer_id):
+    normalized = normalize_name(raw_name)
+    if not normalized:
+        return
+    with SessionLocal() as session:
+        existing = session.query(CustomerAlias).filter(CustomerAlias.raw_name == normalized).first()
+        if existing:
+            existing.customer_id = customer_id
+        else:
+            session.add(CustomerAlias(raw_name=normalized, customer_id=customer_id))
+        session.commit()
+    get_alias_map_cached.clear()
+
+def delete_customer_alias(raw_name):
+    normalized = normalize_name(raw_name)
+    if not normalized:
+        return
+    with SessionLocal() as session:
+        session.query(CustomerAlias).filter(CustomerAlias.raw_name == normalized).delete()
+        session.commit()
+    get_alias_map_cached.clear()
 
 # ------------------- HELPERS -------------------
 def convert_currency(amount_dkk, target_currency):
@@ -164,8 +205,13 @@ def preview_excel(df):
 def normalize_name(value):
     return str(value).strip().lower() if pd.notna(value) else ""
 
-def find_best_customer_match(customer_name, customers):
+def find_best_customer_match(customer_name, customers, alias_map=None):
     target = normalize_name(customer_name)
+    if alias_map and target in alias_map:
+        alias_customer_id = alias_map[target]
+        for customer in customers:
+            if customer.id == alias_customer_id:
+                return customer
     for customer in customers:
         if normalize_name(customer.name) == target:
             return customer
@@ -368,11 +414,11 @@ Email: limoexpresscph@gmail.com"""
     return pdf.output(dest="S").encode("latin-1")
 
 # ------------------- BULK HELPERS -------------------
-def build_bulk_groups(cleaned_df, customers):
+def build_bulk_groups(cleaned_df, customers, alias_map=None):
     groups = []
     for customer_name, group_df in cleaned_df.groupby("Customer", dropna=False):
         display_name = str(customer_name).strip() if pd.notna(customer_name) and str(customer_name).strip() else "Unknown Customer"
-        matched_customer = find_best_customer_match(display_name, customers)
+        matched_customer = find_best_customer_match(display_name, customers, alias_map)
 
         groups.append({
             "group_customer_name": display_name,
@@ -588,7 +634,8 @@ with tab1:
                 bulk_cleaned_df = clean_trip_dataframe(bulk_df_raw)
                 st.session_state.bulk_preview_df = bulk_cleaned_df.copy()
 
-                bulk_groups = build_bulk_groups(bulk_cleaned_df, customers)
+                alias_map = get_alias_map_cached()
+                bulk_groups = build_bulk_groups(bulk_cleaned_df, customers, alias_map)
 
                 if not bulk_groups:
                     st.warning("No customer groups found in the file.")
@@ -712,6 +759,10 @@ with tab1:
                                     # FIX: pull the newly matched customer's saved default
                                     # currency into the bulk row whenever the match changes.
                                     st.session_state[currency_key] = chosen_db_customer.default_currency or default_currency
+                                    # FIX: remember this match permanently, keyed off the raw
+                                    # "Customer" name from the Excel file, so future bulk
+                                    # uploads with the same name auto-match without re-picking.
+                                    save_customer_alias(group_name, chosen_db_customer.id)
                                 else:
                                     st.session_state[name_key] = group_name
                                     st.session_state[email_key] = ""
@@ -720,6 +771,9 @@ with tab1:
                                     st.session_state[vat_key] = ""
                                     st.session_state[company_key] = True
                                     st.session_state[currency_key] = default_currency
+                                    # FIX: explicitly unmatching clears any remembered alias
+                                    # for this raw name too.
+                                    delete_customer_alias(group_name)
 
                                 st.session_state[f"{match_key}_last_id"] = current_id
 
