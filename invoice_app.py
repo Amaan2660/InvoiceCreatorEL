@@ -159,6 +159,31 @@ def get_currency_note(currency):
     }
     return f"{currency} (1 {currency} = {rates[currency]} DKK)" if currency in rates else currency
 
+def sanitize_pdf_text(value):
+    # FPDF's classic .output(dest="S").encode("latin-1") call can only handle
+    # latin-1 characters. Free text pulled from Excel/customer records often
+    # contains unicode punctuation (en/em dashes, curly quotes, ellipsis,
+    # non-breaking spaces) that isn't in latin-1 and raises UnicodeEncodeError
+    # at generation time. Normalize the common cases to ASCII equivalents,
+    # then replace anything else still unencodable so PDF generation never
+    # crashes on unexpected characters.
+    if value is None:
+        return ""
+    text = str(value)
+    replacements = {
+        "\u2013": "-",    # en dash
+        "\u2014": "-",    # em dash
+        "\u2018": "'",    # left single quote
+        "\u2019": "'",    # right single quote
+        "\u201c": '"',    # left double quote
+        "\u201d": '"',    # right double quote
+        "\u2026": "...",  # ellipsis
+        "\u00a0": " ",    # non-breaking space
+    }
+    for target, replacement in replacements.items():
+        text = text.replace(target, replacement)
+    return text.encode("latin-1", errors="replace").decode("latin-1")
+
 def get_bank_details(bank_choice):
     if bank_choice == "Nordea":
         return {
@@ -307,6 +332,12 @@ def generate_invoice_pdf(receiver, invoice_number, currency, description, total_
     pdf = FPDF()
     pdf.add_page()
     bank_details = get_bank_details(bank_choice)
+
+    # FIX: sanitize every free-text field before it reaches FPDF so unicode
+    # punctuation from Excel/customer data can't crash generation.
+    invoice_number = sanitize_pdf_text(invoice_number)
+    description = sanitize_pdf_text(description)
+    receiver = {k: (sanitize_pdf_text(v) if isinstance(v, str) else v) for k, v in receiver.items()}
 
     try:
         pdf.image("logo.png", x=10, y=8, w=40)
