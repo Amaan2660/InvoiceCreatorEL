@@ -473,6 +473,10 @@ def create_zip_from_bulk_results(results):
     return zip_buffer.getvalue()
 
 def validate_bulk_rows(rows):
+    # FIX: a blank invoice number now means "skip this row, not an error" —
+    # the same as unchecking "Include this invoice". Previously any included
+    # row with an empty Invoice Number field failed validation, forcing you
+    # to manually untick every row you didn't want to generate yet.
     errors = []
     invoice_numbers = []
 
@@ -482,13 +486,13 @@ def validate_bulk_rows(rows):
 
         invoice_number = str(row.get("invoice_number", "")).strip()
         if not invoice_number:
-            errors.append(f"Row {idx}: Invoice number is required.")
-        else:
-            invoice_numbers.append(invoice_number)
+            continue
 
         recipient_name = str(row.get("recipient_name", "")).strip()
         if not recipient_name:
-            errors.append(f"Row {idx}: Recipient name is required.")
+            errors.append(f"Row {idx}: Recipient name is required (invoice number {invoice_number}).")
+
+        invoice_numbers.append(invoice_number)
 
     duplicates = pd.Series(invoice_numbers).duplicated(keep=False) if invoice_numbers else pd.Series(dtype=bool)
     if len(invoice_numbers) > 0 and duplicates.any():
@@ -932,6 +936,10 @@ with tab1:
 
                             for row in bulk_rows:
                                 if not row["include"]:
+                                    continue
+                                # FIX: skip rows left blank on purpose, consistent
+                                # with the relaxed validation above.
+                                if not str(row["invoice_number"]).strip():
                                     continue
 
                                 receiver_dict = {
