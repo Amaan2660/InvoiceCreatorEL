@@ -231,6 +231,32 @@ def preview_excel(df):
 def normalize_name(value):
     return str(value).strip().lower() if pd.notna(value) else ""
 
+# FIX: these customers should default to NOT being marked for email sending in
+# bulk (aggregators/B2B accounts typically invoiced or paid outside of email).
+# Matching is done on normalized name against either the raw "Customer" name
+# from the uploaded Excel file or the matched saved customer's name. This only
+# sets the initial checkbox state — it stays fully editable per row.
+DEFAULT_NO_EMAIL_CUSTOMERS = {
+    normalize_name(n) for n in [
+        "Airport taxi transfers",
+        "AtoB Transfer",
+        "Booking.com",
+        "DMC Nordic",
+        "EuroLimo_Online",
+        "Forudbetalt Kunde",
+        "Get-e",
+        "Get-e Lufthansa",
+        "Profi Driver",
+        "Talixo",
+        "Transfeero",
+        "Transferz",
+        "trip.com",
+    ]
+}
+
+def is_default_no_email_customer(*names):
+    return any(normalize_name(n) in DEFAULT_NO_EMAIL_CUSTOMERS for n in names if n)
+
 def find_best_customer_match(customer_name, customers, alias_map=None):
     target = normalize_name(customer_name)
     if alias_map and target in alias_map:
@@ -815,7 +841,12 @@ with tab1:
                                         else:
                                             st.session_state[f"bulk_invoice_number_val_{i}"] = ""
 
-                            send_email_flag = st.checkbox("Mark for email sending", value=bool(default_email), key=f"bulk_send_email_{idx}")
+                            # FIX: default off for known no-email customers (aggregators/B2B),
+                            # regardless of whether they have a saved email on file.
+                            send_email_default = bool(default_email) and not is_default_no_email_customer(
+                                group_name, matched_customer.name if matched_customer else None
+                            )
+                            send_email_flag = st.checkbox("Mark for email sending", value=send_email_default, key=f"bulk_send_email_{idx}")
 
                             match_key = f"bulk_match_customer_{idx}"
                             name_key = f"bulk_recipient_name_{idx}"
