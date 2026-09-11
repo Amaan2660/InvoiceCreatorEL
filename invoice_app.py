@@ -682,6 +682,7 @@ with tab1:
                             contact_key = f"bulk_contact_{idx}"
                             vat_key = f"bulk_vat_{idx}"
                             company_key = f"bulk_is_company_{idx}"
+                            currency_key = f"bulk_currency_{idx}"
 
                             options_list = [None] + customers
                             default_index = options_list.index(default_customer) if default_customer in customers else 0
@@ -708,6 +709,9 @@ with tab1:
                                     st.session_state[contact_key] = chosen_db_customer.contact or ""
                                     st.session_state[vat_key] = chosen_db_customer.vat or ""
                                     st.session_state[company_key] = bool(chosen_db_customer.is_company)
+                                    # FIX: pull the newly matched customer's saved default
+                                    # currency into the bulk row whenever the match changes.
+                                    st.session_state[currency_key] = chosen_db_customer.default_currency or default_currency
                                 else:
                                     st.session_state[name_key] = group_name
                                     st.session_state[email_key] = ""
@@ -715,6 +719,7 @@ with tab1:
                                     st.session_state[contact_key] = ""
                                     st.session_state[vat_key] = ""
                                     st.session_state[company_key] = True
+                                    st.session_state[currency_key] = default_currency
 
                                 st.session_state[f"{match_key}_last_id"] = current_id
 
@@ -730,6 +735,11 @@ with tab1:
                                 st.session_state[vat_key] = default_vat
                             if company_key not in st.session_state:
                                 st.session_state[company_key] = default_is_company
+                            # FIX: initial seed for the currency on first render, using
+                            # the matched customer's default currency (falls back to
+                            # the bulk-wide Default Currency for unmatched customers).
+                            if currency_key not in st.session_state:
+                                st.session_state[currency_key] = default_customer_currency
 
                             recipient_name = st.text_input("Recipient Name", key=name_key)
                             recipient_email = st.text_input("Recipient Email", key=email_key)
@@ -757,17 +767,25 @@ with tab1:
                                 st.session_state[desc_key] = default_description
                                 st.session_state[desc_seed_key] = default_description
 
+                            # FIX: surface the matched customer's saved default currency
+                            # explicitly, so it's visible even before opening the dropdown.
+                            if chosen_db_customer and chosen_db_customer.default_currency:
+                                st.caption(f"💱 Customer default currency: {chosen_db_customer.default_currency}")
+
                             col_a, col_b, col_c = st.columns(3)
                             with col_a:
                                 st.session_state[invoice_key] = st.session_state[val_key]
                                 invoice_number_val = st.text_input("Invoice Number", key=invoice_key)
                             with col_b:
                                 currency_options_list = ["DKK", "EUR", "USD", "GBP"]
+                                # FIX: no longer computes `index=` from a stale default —
+                                # the widget now reads/writes st.session_state[currency_key]
+                                # directly, which is kept in sync with the matched
+                                # customer's default_currency above.
                                 currency_val = st.selectbox(
                                     "Currency",
                                     currency_options_list,
-                                    index=currency_options_list.index(default_customer_currency) if default_customer_currency in currency_options_list else 0,
-                                    key=f"bulk_currency_{idx}"
+                                    key=currency_key
                                 )
                             with col_c:
                                 bank_val = st.selectbox(
