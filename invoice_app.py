@@ -763,6 +763,17 @@ with tab1:
                 else:
                     st.markdown("### Customer Groups")
 
+                    # FIX: default include-state for a group before its checkbox has
+                    # rendered — mirrors the same no-email-customer exclusion used for
+                    # the checkbox's own `value=`, so auto-numbering doesn't assume a
+                    # no-email customer is included before its widget exists yet.
+                    def group_include_default(i):
+                        g = bulk_groups[i]
+                        gm = g["matched_customer"]
+                        return not is_default_no_email_customer(
+                            g["group_customer_name"], gm.name if gm else None
+                        )
+
                     if starting_invoice_number.strip().isdigit():
                         start_num = int(starting_invoice_number.strip())
                     else:
@@ -781,7 +792,7 @@ with tab1:
                         if start_num is not None:
                             counter = start_num
                             for i in range(len(bulk_groups)):
-                                is_included = st.session_state.get(f"bulk_include_{i}", True)
+                                is_included = st.session_state.get(f"bulk_include_{i}", group_include_default(i))
                                 if is_included:
                                     st.session_state[f"bulk_invoice_number_val_{i}"] = str(counter)
                                     counter += 1
@@ -823,18 +834,23 @@ with tab1:
                         default_customer_currency = matched_customer.default_currency if matched_customer and matched_customer.default_currency else default_currency
 
                         with st.expander(f"{group_name} — {group['trip_count']} trips — {group['total_dkk']:,.2f} DKK", expanded=False):
-                            include = st.checkbox("Include this invoice", value=True, key=f"bulk_include_{idx}")
+                            # FIX: default "Include this invoice" off for known
+                            # no-email customers too, not just the email checkbox.
+                            include_default = not is_default_no_email_customer(
+                                group_name, matched_customer.name if matched_customer else None
+                            )
+                            include = st.checkbox("Include this invoice", value=include_default, key=f"bulk_include_{idx}")
 
                             include_changed_key = f"bulk_include_prev_{idx}"
                             if include_changed_key not in st.session_state:
-                                st.session_state[include_changed_key] = True
+                                st.session_state[include_changed_key] = include_default
 
                             if st.session_state[include_changed_key] != include:
                                 st.session_state[include_changed_key] = include
                                 if starting_invoice_number.strip().isdigit():
                                     counter = int(starting_invoice_number.strip())
                                     for i in range(len(bulk_groups)):
-                                        is_included = st.session_state.get(f"bulk_include_{i}", True)
+                                        is_included = st.session_state.get(f"bulk_include_{i}", group_include_default(i))
                                         if is_included:
                                             st.session_state[f"bulk_invoice_number_val_{i}"] = str(counter)
                                             counter += 1
