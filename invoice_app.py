@@ -40,10 +40,33 @@ for key, value in SESSION_DEFAULTS.items():
 # ------------------- DATABASE SETUP -------------------
 Base = declarative_base()
 
+def build_db_url(raw_url):
+    # FIX: use whichever Postgres driver is actually installed, so a secret
+    # starting with postgresql+psycopg:// no longer crashes with
+    # ModuleNotFoundError when only psycopg2 is available (and vice versa).
+    url = raw_url.strip().replace("postgres://", "postgresql://", 1)
+    try:
+        import psycopg  # noqa: F401
+        driver_prefix = "postgresql+psycopg://"
+    except ImportError:
+        try:
+            import psycopg2  # noqa: F401
+            driver_prefix = "postgresql+psycopg2://"
+        except ImportError:
+            return None
+    for prefix in ("postgresql+psycopg2://", "postgresql+psycopg://", "postgresql://"):
+        if url.startswith(prefix):
+            return driver_prefix + url[len(prefix):]
+    return url
+
 try:
-    DB_URL = st.secrets["SUPABASE_DB_URL"].replace("postgres://", "postgresql://", 1)
+    DB_URL = build_db_url(st.secrets["SUPABASE_DB_URL"])
 except KeyError:
     st.error("Missing SUPABASE_DB_URL in secrets. Check your Streamlit secrets configuration.")
+    st.stop()
+
+if DB_URL is None:
+    st.error("No Postgres driver installed. Add `psycopg[binary]` (or `psycopg2-binary`) to requirements.txt and reboot the app.")
     st.stop()
 
 engine = create_engine(
