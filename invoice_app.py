@@ -541,9 +541,8 @@ def add_specification_section(pdf, spec_df, currency, total_amount, spec_layout=
         pdf.set_text_color(0, 0, 0)
         pdf.set_font("Helvetica", "", 8)
 
-    if pdf.get_y() > pdf.h - 45:
-        pdf.add_page()
-    pdf.ln(8)
+    # Always start the specification on its own page (page 2).
+    pdf.add_page()
     pdf.set_font("Helvetica", "B", 12)
     pdf.cell(0, 8, "SERVICE SPECIFICATION", ln=True)
     pdf.ln(1)
@@ -589,13 +588,22 @@ def build_bulk_groups(cleaned_df, customers, alias_map=None):
     groups.sort(key=lambda x: x["group_customer_name"].lower())
     return groups
 
+def safe_path_part(name, fallback="Unknown"):
+    # Make a string safe to use as a folder/file name inside a ZIP.
+    text = safe(name)
+    for ch in '\\/:*?"<>|':
+        text = text.replace(ch, "-")
+    text = text.strip().strip(".")
+    return text or fallback
+
 def create_zip_from_bulk_results(results):
+    # Layout: Invoices/<Customer group name>/<invoice>.pdf
     zip_buffer = BytesIO()
     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
         for result in results:
-            zip_file.writestr(result["pdf_filename"], result["pdf_bytes"])
-            if result["spec_bytes"] is not None:
-                zip_file.writestr(result["spec_filename"], result["spec_bytes"])
+            folder = safe_path_part(result.get("group_name") or result.get("recipient_name"))
+            filename = safe_path_part(result["pdf_filename"], fallback="invoice.pdf")
+            zip_file.writestr(f"Invoices/{folder}/{filename}", result["pdf_bytes"])
     zip_buffer.seek(0)
     return zip_buffer.getvalue()
 
@@ -642,9 +650,6 @@ def generate_single_invoice_package(
     total_amount_dkk = float(cleaned_df["Base Rate"].sum())
     final_total = convert_currency(total_amount_dkk, currency) if currency != "DKK" else total_amount_dkk
 
-    spec_bytes = build_specification_workbook_bytes(cleaned_df)
-    spec_filename = f"SERVICE SPECIFICATION FOR INVOICE {invoice_number}.xlsx"
-
     pdf_bytes = generate_invoice_pdf(
         receiver=receiver_dict,
         invoice_number=invoice_number,
@@ -662,8 +667,8 @@ def generate_single_invoice_package(
     return {
         "pdf_bytes": pdf_bytes,
         "pdf_filename": pdf_filename,
-        "spec_bytes": spec_bytes,
-        "spec_filename": spec_filename,
+        "spec_bytes": None,
+        "spec_filename": None,
         "booking_count": booking_count,
         "total_amount_dkk": total_amount_dkk,
         "final_total": final_total,
@@ -734,8 +739,6 @@ with tab1:
                 preview_df = None
 
                 if not cleaned_df.empty:
-                    spec_bytes = build_specification_workbook_bytes(cleaned_df)
-                    spec_name = f"SERVICE SPECIFICATION FOR INVOICE {invoice_number}.xlsx"
                     preview_df = cleaned_df.copy()
 
                 receiver_dict = customer_to_dict(receiver)
@@ -772,15 +775,6 @@ with tab1:
 
         if st.session_state.single_generated_preview_df is not None:
             preview_excel(st.session_state.single_generated_preview_df)
-
-        if st.session_state.single_generated_spec_bytes is not None:
-            st.download_button(
-                "⬇️ Download Specification XLSX",
-                data=st.session_state.single_generated_spec_bytes,
-                file_name=st.session_state.single_generated_spec_name,
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                key="download_single_spec"
-            )
 
         if st.session_state.single_generated_pdf_bytes is not None:
             st.download_button(
@@ -1261,13 +1255,6 @@ with tab1:
                                 mime="application/pdf",
                                 key=f"bulk_pdf_{idx}"
                             )
-                            st.download_button(
-                                f"⬇️ Download Specification — {result['invoice_number']}",
-                                data=result["spec_bytes"],
-                                file_name=result["spec_filename"],
-                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                                key=f"bulk_spec_{idx}"
-                            )
 
                         st.markdown("### Choose Which Generated Invoices to Send")
 
@@ -1330,12 +1317,6 @@ with tab1:
                                                 "content": result["pdf_bytes"],
                                                 "maintype": "application",
                                                 "subtype": "pdf",
-                                            },
-                                            {
-                                                "filename": result["spec_filename"],
-                                                "content": result["spec_bytes"],
-                                                "maintype": "application",
-                                                "subtype": "vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                                             },
                                         ]
                                     )
