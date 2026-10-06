@@ -6,6 +6,7 @@ import pandas as pd
 import base64
 import zipfile
 import smtplib
+import unicodedata
 from fpdf import FPDF
 from io import BytesIO
 from email.message import EmailMessage
@@ -183,30 +184,21 @@ def get_currency_note(currency):
     }
     return f"{currency} (1 {currency} = {rates[currency]} DKK)" if currency in rates else currency
 
-def sanitize_pdf_text(value):
-    # FPDF's classic .output(dest="S").encode("latin-1") call can only handle
-    # latin-1 characters. Free text pulled from Excel/customer records often
-    # contains unicode punctuation (en/em dashes, curly quotes, ellipsis,
-    # non-breaking spaces) that isn't in latin-1 and raises UnicodeEncodeError
-    # at generation time. Normalize the common cases to ASCII equivalents,
-    # then replace anything else still unencodable so PDF generation never
-    # crashes on unexpected characters.
-    if value is None:
-        return ""
-    text = str(value)
-    replacements = {
-        "\u2013": "-",    # en dash
-        "\u2014": "-",    # em dash
-        "\u2018": "'",    # left single quote
-        "\u2019": "'",    # right single quote
-        "\u201c": '"',    # left double quote
-        "\u201d": '"',    # right double quote
-        "\u2026": "...",  # ellipsis
-        "\u00a0": " ",    # non-breaking space
-    }
-    for target, replacement in replacements.items():
+def safe(val):
+    # Latin-1 strip for FPDF (classic fpdf only encodes latin-1). Common unicode
+    # punctuation is mapped first so dashes/quotes survive as ASCII, then
+    # everything else is NFKD-normalised and unencodable characters dropped.
+    if val is None or (isinstance(val, float) and str(val) == 'nan'):
+        return ''
+    text = str(val)
+    for target, replacement in {
+        "\u2013": "-", "\u2014": "-", "\u2018": "'", "\u2019": "'",
+        "\u201c": '"', "\u201d": '"', "\u2026": "...", "\u00a0": " ",
+    }.items():
         text = text.replace(target, replacement)
-    return text.encode("latin-1", errors="replace").decode("latin-1")
+    return unicodedata.normalize('NFKD', text).encode('latin-1', 'ignore').decode('latin-1')
+
+sanitize_pdf_text = safe  # backwards-compatible alias
 
 def get_bank_details(bank_choice):
     if bank_choice == "Nordea":
@@ -378,121 +370,206 @@ def send_email_gmail(to_email, subject, body, attachments):
         server.send_message(msg)
 
 # ------------------- PDF GENERATION -------------------
-def generate_invoice_pdf(receiver, invoice_number, currency, description, total_amount, booking_count, due_date, bank_choice):
+def resolve_spec_layout(spec_df, spec_layout):
+    # "Auto" -> use the Cust. Ref. variant only when the data actually has refs.
+    if spec_layout in ("Standard", "Cust. Ref.", "From / To"):
+        return spec_layout
+    if spec_df is not None and "Cust. Ref." in spec_df.columns:
+        if spec_df["Cust. Ref."].apply(lambda v: bool(safe(v).strip())).any():
+            return "Cust. Ref."
+    return "Standard"
+
+def generate_invoice_pdf(receiver, invoice_number, currency, description, total_amount, booking_count, due_date, bank_choice, spec_df=None, spec_layout="Auto"):
     pdf = FPDF()
+    pdf.set_auto_page_break(True, margin=20)
     pdf.add_page()
     bank_details = get_bank_details(bank_choice)
 
-    # FIX: sanitize every free-text field before it reaches FPDF so unicode
-    # punctuation from Excel/customer data can't crash generation.
-    invoice_number = sanitize_pdf_text(invoice_number)
-    description = sanitize_pdf_text(description)
-    receiver = {k: (sanitize_pdf_text(v) if isinstance(v, str) else v) for k, v in receiver.items()}
+    invoice_number = safe(invoice_number)
+    description = safe(description)
+    receiver = {k: (safe(v) if isinstance(v, str) else v) for k, v in receiver.items()}
 
+    # Logo top left (40mm wide)
     try:
         pdf.image("logo.png", x=10, y=8, w=40)
     except Exception:
         pass
 
+    # INVOICE nr top right (20pt bold)
     pdf.set_font("Helvetica", "B", 20)
-    pdf.set_xy(150, 10)
-    pdf.cell(0, 10, f"INVOICE {invoice_number}", ln=True)
+    pdf.set_xy(100, 10)
+    pdf.cell(100, 10, f"INVOICE {invoice_number}", ln=True, align="R")
 
-    pdf.set_font("Helvetica", size=11)
-    pdf.set_xy(10, 30)
+    # From block (left, y=35)
+    pdf.set_xy(10, 35)
     pdf.set_font("Helvetica", "B", 11)
-    pdf.multi_cell(90, 6, "From:")
-    pdf.set_font("Helvetica", "", 11)
-
-    sender_text = f"""Limousine Service Xpress ApS
-Industriholmen 82
-2650 Hvidovre
-Denmark
-CVR/VAT: DK45247961
-IBAN: {bank_details['iban']}
-SWIFT: {bank_details['swift']}"""
-
+    pdf.cell(90, 6, "From:", ln=True)
+    pdf.set_font("Helvetica", "", 10)
+    sender_lines = [
+        "Limousine Service Xpress ApS",
+        "Industriholmen 82, 2650 Hvidovre",
+        "CVR/VAT: DK45247961",
+        f"IBAN: {bank_details['iban']}",
+        f"SWIFT: {bank_details['swift']}",
+    ]
     if bank_details["reg_no"]:
-        sender_text += f"""
-Reg Nr: {bank_details['reg_no']}
-Konto Nr: {bank_details['account_no']}"""
+        sender_lines.append(f"Reg Nr: {bank_details['reg_no']} / Konto Nr: {bank_details['account_no']}")
+    sender_lines.append("limoexpresscph@gmail.com")
+    for line in sender_lines:
+        pdf.set_x(10)
+        pdf.cell(90, 5.5, line, ln=True)
 
-    sender_text += """
-Email: limoexpresscph@gmail.com"""
-
-    pdf.multi_cell(90, 6, sender_text)
-
-    pdf.set_xy(120, 30)
+    # To block (right, y=35)
+    pdf.set_xy(120, 35)
     pdf.set_font("Helvetica", "B", 11)
-    pdf.cell(0, 6, "To:", ln=True)
-    pdf.set_font("Helvetica", "", 11)
-
-    pdf.set_x(120)
+    pdf.cell(80, 6, "To:", ln=True)
+    pdf.set_font("Helvetica", "", 10)
+    to_lines = []
     if receiver.get("name"):
-        pdf.cell(0, 6, receiver["name"], ln=True)
+        to_lines.append(receiver["name"])
     if receiver.get("contact"):
-        pdf.set_x(120)
-        pdf.multi_cell(80, 6, f"Att: {receiver['contact']}")
+        to_lines.append(f"Att: {receiver['contact']}")
     if receiver.get("address"):
-        pdf.set_x(120)
-        pdf.multi_cell(80, 6, receiver["address"])
+        to_lines.append(receiver["address"])
     if receiver.get("vat") and receiver.get("is_company"):
-        pdf.set_x(120)
-        pdf.cell(0, 6, f"VAT No: {receiver['vat']}", ln=True)
+        to_lines.append(f"VAT: {receiver['vat']}")
     if receiver.get("email"):
+        to_lines.append(receiver["email"])
+    for line in to_lines:
         pdf.set_x(120)
-        pdf.multi_cell(80, 6, f"Email: {receiver['email']}")
+        pdf.multi_cell(80, 5.5, line)
 
-    pdf.set_xy(10, 100)
+    # Dates / currency (y=105)
+    pdf.set_xy(10, 105)
+    pdf.set_font("Helvetica", "", 10)
     today = datetime.date.today().strftime("%d/%m/%Y")
     due_date_fmt = due_date.strftime("%d/%m/%Y") if hasattr(due_date, "strftime") else str(due_date)
-    currency_note = get_currency_note(currency)
     pdf.cell(0, 6, f"Invoice Date: {today}", ln=True)
     pdf.cell(0, 6, f"Due Date: {due_date_fmt}", ln=True)
-    pdf.cell(0, 6, f"Currency: {currency_note}", ln=True)
-    pdf.ln(10)
+    pdf.cell(0, 6, f"Currency: {get_currency_note(currency)}", ln=True)
+    pdf.ln(6)
 
+    # Summary table: Description (140) | Qty (20) | Total (30)
+    pdf.set_font("Helvetica", "B", 10)
+    pdf.cell(140, 8, "Description", border=1)
+    pdf.cell(20, 8, "Qty", border=1, align="C")
+    pdf.cell(30, 8, "Total", border=1, align="R", ln=True)
+
+    y = pdf.get_y()
+    row_h = 14
+    pdf.rect(10, y, 140, row_h)
+    pdf.rect(150, y, 20, row_h)
+    pdf.rect(170, y, 30, row_h)
+    pdf.set_font("Helvetica", "", 10)
+    pdf.set_xy(11, y + 1)
+    pdf.cell(138, 6, description or "Transfers")
+    pdf.set_font("Helvetica", "I", 8)
+    pdf.set_xy(11, y + 7)
+    pdf.cell(138, 5, "(see specification below)")
+    pdf.set_font("Helvetica", "", 10)
+    pdf.set_xy(150, y + 4)
+    pdf.cell(20, 6, str(booking_count), align="C")
+    pdf.set_xy(170, y + 4)
+    pdf.cell(29, 6, f"{total_amount:,.2f}", align="R")
+    pdf.set_xy(10, y + row_h + 4)
+
+    pdf.set_font("Helvetica", "B", 10)
+    pdf.cell(160, 7, "Subtotal:", align="R")
+    pdf.cell(30, 7, f"{float(total_amount):,.2f} {currency}", align="R", ln=True)
     pdf.set_font("Helvetica", "B", 12)
-    pdf.cell(120, 8, "Description", border=1)
-    pdf.cell(30, 8, "Qty", border=1)
-    pdf.cell(40, 8, "Total", border=1, ln=True)
+    pdf.cell(160, 8, "Total Amount Due:", align="R")
+    pdf.cell(30, 8, f"{total_amount:,.2f} {currency}", align="R", ln=True)
 
-    pdf.set_font("Helvetica", "", 11)
-    pdf.cell(120, 8, description or "Transfers", border=1)
-    pdf.cell(30, 8, str(booking_count), border=1)
-    pdf.cell(40, 8, f"{total_amount:,.2f} {currency}", border=1, ln=True)
-
-    pdf.ln(8)
-    pdf.set_font("Helvetica", "B", 11)
-    pdf.cell(150, 8, "Subtotal:", border=0)
-    pdf.cell(40, 8, f"{float(total_amount):,.2f} {currency}", ln=True)
-
-    pdf.set_font("Helvetica", "B", 12)
-    pdf.cell(150, 8, "Total Amount Due:", border=0)
-    pdf.cell(40, 8, f"{total_amount:,.2f} {currency}", ln=True)
-
-    pdf.ln(10)
-    pdf.set_font("Helvetica", "I", 10)
+    pdf.ln(4)
+    pdf.set_font("Helvetica", "I", 9)
     pdf.cell(0, 6, f"Please add invoice number {invoice_number} as reference when making payment.", ln=True)
 
-    if bank_choice == "Nordea":
-        previous_auto_page_break = pdf.auto_page_break
-        previous_bottom_margin = pdf.b_margin
-        pdf.set_auto_page_break(False)
-        pdf.set_y(-50)
-        pdf.set_font("Helvetica", "B", 13)
-        pdf.cell(190, 8, "IMPORTANT: PLEASE USE OUR NEW BANK DETAILS", border=1, ln=True, align="C")
-        pdf.set_font("Helvetica", "", 10)
-        pdf.multi_cell(
-            190,
-            6,
-            "Please make payment using the Nordea banking information stated on this invoice.",
-            border=1,
-            align="C"
-        )
-        pdf.set_auto_page_break(previous_auto_page_break, margin=previous_bottom_margin)
+    if spec_df is not None and not spec_df.empty:
+        add_specification_section(pdf, spec_df, currency, total_amount, spec_layout)
 
     return pdf.output(dest="S").encode("latin-1")
+
+def add_specification_section(pdf, spec_df, currency, total_amount, spec_layout="Auto"):
+    layout = resolve_spec_layout(spec_df, spec_layout)
+    if layout == "Cust. Ref.":
+        headers, widths = ["Date", "Passenger", "Cust. Ref.", "Amount"], [22, 58, 68, 27]
+    elif layout == "From / To":
+        headers, widths = ["Date", "Passenger", "From / To", "Amount"], [22, 65, 65, 23]
+    else:
+        headers, widths = ["Date", "Passenger", "Amount"], [22, 90, 27]
+    row_h = 6
+
+    def fit(text, width):
+        text = safe(text)
+        max_w = width - 2
+        if pdf.get_string_width(text) <= max_w:
+            return text
+        while text and pdf.get_string_width(text + "...") > max_w:
+            text = text[:-1]
+        return text + "..."
+
+    def fmt_date(v):
+        if v is None or (not hasattr(v, "strftime") and pd.isna(v)):
+            return ""
+        if hasattr(v, "strftime"):
+            return v.strftime("%d/%m/%Y")
+        try:
+            return pd.to_datetime(v, dayfirst=True).strftime("%d/%m/%Y")
+        except Exception:
+            return safe(v)
+
+    def fmt_amount(v):
+        amount = convert_currency(float(v), currency) if currency != "DKK" else float(v)
+        return f"{amount:,.2f}"
+
+    def row_values(row):
+        vals = [fmt_date(row.get("Trip Date")), safe(row.get("Passenger"))]
+        if layout == "Cust. Ref.":
+            vals.append(safe(row.get("Cust. Ref.")))
+        elif layout == "From / To":
+            vals.append(f"{safe(row.get('From'))} > {safe(row.get('To'))}")
+        vals.append(fmt_amount(row.get("Base Rate")))
+        return vals
+
+    def draw_header():
+        pdf.set_font("Helvetica", "B", 9)
+        pdf.set_fill_color(31, 78, 121)
+        pdf.set_text_color(255, 255, 255)
+        for h, w in zip(headers, widths):
+            pdf.cell(w, row_h, h, border=1, align="R" if h == "Amount" else "L", fill=True)
+        pdf.ln(row_h)
+        pdf.set_text_color(0, 0, 0)
+        pdf.set_font("Helvetica", "", 8)
+
+    if pdf.get_y() > pdf.h - 45:
+        pdf.add_page()
+    pdf.ln(8)
+    pdf.set_font("Helvetica", "B", 12)
+    pdf.cell(0, 8, "SERVICE SPECIFICATION", ln=True)
+    pdf.ln(1)
+    draw_header()
+
+    for i, (_, row) in enumerate(spec_df.iterrows()):
+        if pdf.get_y() + row_h > pdf.h - 20:
+            pdf.add_page()
+            draw_header()
+        if i % 2 == 0:
+            pdf.set_fill_color(235, 243, 251)
+        else:
+            pdf.set_fill_color(255, 255, 255)
+        for j, (val, w) in enumerate(zip(row_values(row), widths)):
+            pdf.cell(w, row_h, fit(val, w), border=1, align="R" if j == len(widths) - 1 else "L", fill=True)
+        pdf.ln(row_h)
+
+    if pdf.get_y() + row_h > pdf.h - 20:
+        pdf.add_page()
+        draw_header()
+    pdf.set_font("Helvetica", "B", 9)
+    pdf.set_fill_color(214, 228, 240)
+    pdf.cell(sum(widths[:-1]), row_h, f"Total ({currency})", border=1, align="R", fill=True)
+    pdf.cell(widths[-1], row_h, f"{float(total_amount):,.2f}", border=1, align="R", fill=True)
+    pdf.ln(row_h)
+
 
 # ------------------- BULK HELPERS -------------------
 def build_bulk_groups(cleaned_df, customers, alias_map=None):
@@ -558,7 +635,8 @@ def generate_single_invoice_package(
     bank_choice,
     invoice_purpose,
     due_date,
-    cleaned_df
+    cleaned_df,
+    spec_layout="Auto"
 ):
     booking_count = int(cleaned_df.shape[0])
     total_amount_dkk = float(cleaned_df["Base Rate"].sum())
@@ -575,7 +653,9 @@ def generate_single_invoice_package(
         total_amount=final_total,
         booking_count=booking_count,
         due_date=due_date,
-        bank_choice=bank_choice
+        bank_choice=bank_choice,
+        spec_df=cleaned_df,
+        spec_layout=spec_layout
     )
     pdf_filename = f"Invoice {invoice_number} for {receiver_dict['name']}.pdf"
 
@@ -618,6 +698,11 @@ with tab1:
         bank_choice = st.selectbox("Bank for payment", ["Nordea", "Revolut"], index=0, key="single_bank")
         invoice_purpose = st.text_input("Invoice Description (e.g. Transfers in May 2025)")
         due_date = st.date_input("Due Date", key="single_due_date")
+        single_spec_layout = st.selectbox(
+            "Specification columns (in PDF)",
+            ["Auto", "Standard", "Cust. Ref.", "From / To"],
+            key="single_spec_layout"
+        )
         mode = st.radio("Select Amount Mode", ["Manual", "Auto from Excel"], key="single_amount_mode")
 
         uploaded = st.file_uploader("Upload Excel File", type=["xls", "xlsx"], key="single_file")
@@ -664,7 +749,9 @@ with tab1:
                     total_amount=final_total,
                     booking_count=booking_count,
                     due_date=due_date,
-                    bank_choice=bank_choice
+                    bank_choice=bank_choice,
+                    spec_df=cleaned_df if not cleaned_df.empty else None,
+                    spec_layout=single_spec_layout
                 )
 
                 st.session_state.single_generated_pdf_bytes = pdf_bytes
@@ -770,6 +857,11 @@ with tab1:
         starting_invoice_number = st.text_input(
             "Starting Invoice Number (optional, used to prefill)",
             key="bulk_start_invoice_number"
+        )
+        bulk_spec_layout = st.selectbox(
+            "Specification columns (in PDF)",
+            ["Auto", "Standard", "Cust. Ref.", "From / To"],
+            key="bulk_spec_layout"
         )
 
         if bulk_uploaded:
@@ -1096,6 +1188,7 @@ with tab1:
                                     invoice_purpose=row["description"],
                                     due_date=row["due_date"],
                                     cleaned_df=row["dataframe"],
+                                    spec_layout=bulk_spec_layout,
                                 )
 
                                 result = {
