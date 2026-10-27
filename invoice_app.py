@@ -379,7 +379,7 @@ def resolve_spec_layout(spec_df, spec_layout):
             return "Cust. Ref."
     return "Standard"
 
-def generate_invoice_pdf(receiver, invoice_number, currency, description, total_amount, booking_count, due_date, bank_choice, spec_df=None, spec_layout="Auto"):
+def generate_invoice_pdf(receiver, invoice_number, currency, description, total_amount, booking_count, due_date, bank_choice, spec_df=None, spec_layout="Auto", spec_note="(see specification below)"):
     pdf = FPDF()
     pdf.set_auto_page_break(True, margin=20)
     pdf.add_page()
@@ -465,7 +465,7 @@ def generate_invoice_pdf(receiver, invoice_number, currency, description, total_
     pdf.cell(138, 6, description or "Transfers")
     pdf.set_font("Helvetica", "I", 8)
     pdf.set_xy(11, y + 7)
-    pdf.cell(138, 5, "(see specification below)")
+    pdf.cell(138, 5, safe(spec_note))
     pdf.set_font("Helvetica", "", 10)
     pdf.set_xy(150, y + 4)
     pdf.cell(20, 6, str(booking_count), align="C")
@@ -489,7 +489,26 @@ def generate_invoice_pdf(receiver, invoice_number, currency, description, total_
 
     return pdf.output(dest="S").encode("latin-1")
 
-def add_specification_section(pdf, spec_df, currency, total_amount, spec_layout="Auto"):
+def generate_specification_pdf(spec_df, invoice_number, currency, total_amount, spec_layout="Auto"):
+    # Standalone specification PDF (same table style as the combined invoice).
+    pdf = FPDF()
+    pdf.set_auto_page_break(True, margin=20)
+    pdf.add_page()
+    try:
+        pdf.image("logo.png", x=10, y=8, w=40)
+    except Exception:
+        pass
+    pdf.set_font("Helvetica", "B", 20)
+    pdf.set_xy(100, 10)
+    pdf.cell(100, 10, f"INVOICE {safe(invoice_number)}", ln=True, align="R")
+    pdf.set_y(35)
+    add_specification_section(
+        pdf, spec_df, currency, total_amount, spec_layout,
+        new_page=False, title=f"SERVICE SPECIFICATION FOR INVOICE {invoice_number}"
+    )
+    return pdf.output(dest="S").encode("latin-1")
+
+def add_specification_section(pdf, spec_df, currency, total_amount, spec_layout="Auto", new_page=True, title="SERVICE SPECIFICATION"):
     layout = resolve_spec_layout(spec_df, spec_layout)
     if layout == "Cust. Ref.":
         headers, widths = ["Date", "Passenger", "Cust. Ref.", "Amount"], [22, 58, 68, 27]
@@ -542,9 +561,10 @@ def add_specification_section(pdf, spec_df, currency, total_amount, spec_layout=
         pdf.set_font("Helvetica", "", 8)
 
     # Always start the specification on its own page (page 2).
-    pdf.add_page()
+    if new_page:
+        pdf.add_page()
     pdf.set_font("Helvetica", "B", 12)
-    pdf.cell(0, 8, "SERVICE SPECIFICATION", ln=True)
+    pdf.cell(0, 8, safe(title), ln=True)
     pdf.ln(1)
     draw_header()
 
@@ -708,6 +728,11 @@ with tab1:
             ["Auto", "Standard", "Cust. Ref.", "From / To"],
             key="single_spec_layout"
         )
+        single_output_mode = st.radio(
+            "Output",
+            ["Invoice + specification in one PDF", "Separate invoice PDF and specification PDF"],
+            key="single_output_mode"
+        )
         mode = st.radio("Select Amount Mode", ["Manual", "Auto from Excel"], key="single_amount_mode")
 
         uploaded = st.file_uploader("Upload Excel File", type=["xls", "xlsx"], key="single_file")
@@ -731,8 +756,11 @@ with tab1:
             booking_count = st.number_input("Manual Number of Bookings", min_value=0)
 
         if st.button("Generate Invoice", key="generate_single_invoice"):
+            separate_output = single_output_mode.startswith("Separate")
             if not receiver or not invoice_number:
                 st.error("Customer and Invoice Number are required.")
+            elif separate_output and cleaned_df.empty:
+                st.error("A separate specification needs an uploaded Excel file with trips.")
             else:
                 spec_bytes = None
                 spec_name = None
@@ -753,18 +781,24 @@ with tab1:
                     booking_count=booking_count,
                     due_date=due_date,
                     bank_choice=bank_choice,
-                    spec_df=cleaned_df if not cleaned_df.empty else None,
-                    spec_layout=single_spec_layout
+                    spec_df=None if separate_output else (cleaned_df if not cleaned_df.empty else None),
+                    spec_layout=single_spec_layout,
+                    spec_note="(see separate specification)" if separate_output else "(see specification below)"
                 )
+
+                if separate_output:
+                    spec_bytes = generate_specification_pdf(
+                        cleaned_df, invoice_number, currency, final_total, single_spec_layout
+                    )
+                    spec_name = f"Specification {invoice_number} for {receiver.name}.pdf"
 
                 st.session_state.single_generated_pdf_bytes = pdf_bytes
                 st.session_state.single_generated_pdf_name = f"Invoice {invoice_number} for {receiver.name}.pdf"
                 st.session_state.single_generated_spec_bytes = spec_bytes
                 st.session_state.single_generated_spec_name = spec_name
                 st.session_state.single_generated_preview_df = preview_df
-                # FIX: capture the metadata actually used for this invoice, so the
-                # email sent below always matches the attached PDF — even if the
-                # form fields (customer, due date, currency...) get changed afterward.
+                # Capture the metadata actually used for this invoice, so the
+                # email sent below always matches the attached PDF(s).
                 st.session_state.single_generated_meta = {
                     "invoice_number": invoice_number,
                     "due_date": due_date,
@@ -783,6 +817,15 @@ with tab1:
                 file_name=st.session_state.single_generated_pdf_name,
                 mime="application/pdf",
                 key="download_single_pdf"
+            )
+
+        if st.session_state.single_generated_spec_bytes is not None:
+            st.download_button(
+                "⬇️ Download Specification PDF",
+                data=st.session_state.single_generated_spec_bytes,
+                file_name=st.session_state.single_generated_spec_name,
+                mime="application/pdf",
+                key="download_single_spec_pdf"
             )
 
         # FIX: send the just-generated single invoice by the same Gmail account
@@ -814,7 +857,7 @@ with tab1:
                                 "filename": st.session_state.single_generated_spec_name,
                                 "content": st.session_state.single_generated_spec_bytes,
                                 "maintype": "application",
-                                "subtype": "vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                "subtype": "pdf",
                             })
 
                         email_body = build_email_body(
